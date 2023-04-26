@@ -19,3 +19,7 @@
 
 # Go workspace file
 go.work
+.idea/kassette-server.iml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
