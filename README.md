@@ -22,3 +22,6 @@ Configuration is done in app but the application can be scaled
 ### Usage
 
 ### Documentation
+
+![alt text](https://github.com/kassette-ai/kassette-server/blob/main/Kassette-architecture.png)
+
