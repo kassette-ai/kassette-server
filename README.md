@@ -6,6 +6,8 @@ With Kassette, you can build product data pipelines that connect your whole data
 
 ## Getting Started
 
+
+
 ### Installation
 
 Kassette is available as a helm chart. You can run it using the following command:
@@ -24,4 +26,13 @@ Configuration is done in app but the application can be scaled
 ### Documentation
 
 ![alt text](https://github.com/kassette-ai/kassette-server/blob/main/Kassette-architecture.png)
+
+The Kassette architecture is composed of 2 main components:
+Kassette Server
+Contains a processor which accepts data, persists to kafka and then forwards to the transformer, get's a response and forwards to the destination.
+A transformer which accepts data from the gateway, collects context and then returns to the gateway which places the
+
+Kassette trasformer
+This is manages the sources, destinations and reports on health of the feeds
+
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	_ "github.com/lib/pq"
+	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/runner"
 	"log"
 	"os"
@@ -13,8 +14,10 @@ import (
 )
 
 func main() {
+	viper.SetConfigFile(".env")
 	// source environment variables
 	//setupPostgres()
+
 	runner.CreateServer()
 }
 
