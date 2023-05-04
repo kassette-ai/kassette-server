@@ -7,7 +7,8 @@ import (
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
-	"kassette.ai/kassette-server/runner"
+	"kassette.ai/kassette-server/gateway"
+	jobsdb "kassette.ai/kassette-server/jobs"
 	"log"
 	"os"
 	"time"
@@ -15,10 +16,19 @@ import (
 
 func main() {
 	viper.SetConfigFile(".env")
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	// source environment variables
 	//setupPostgres()
+	var gatewayDB jobsdb.HandleT
+	var gateway gateway.HandleT
 
-	runner.CreateServer()
+	gateway.Setup(&gatewayDB)
+
 }
 
 func setupPostgres() {

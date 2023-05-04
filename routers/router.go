@@ -9,11 +9,11 @@ func InitRouter() *gin.Engine {
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
 
-	r.GET("/", hello)
+	r.POST("/collect", collect)
 
 	return r
 }
-func hello(c *gin.Context) {
+func collect(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "hello world",
 	})

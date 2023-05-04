@@ -1,20 +1,9 @@
 package runner
 
-import (
-	"kassette.ai/kassette-server/routers"
-	"log"
-)
+import "kassette.ai/kassette-server/gateway"
 
 func CreateServer() {
-	endPoint := "8090"
-	routersInit := routers.InitRouter()
 
-	err := routersInit.Run(":" + endPoint)
-
-	if err != nil {
-		return
-	}
-
-	log.Printf("[info] start http server listening %s", endPoint)
+	gateway.InitGateway()
 
 }

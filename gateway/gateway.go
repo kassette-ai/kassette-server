@@ -1,9 +1,11 @@
 package gateway
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/jobs"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -65,115 +67,75 @@ type batchWebRequestT struct {
 	batchRequest []*webRequestT
 }
 
-func (gateway *HandleT) webRequestBatchDBWriter(process int) {
-	//for breq := range gateway.batchRequestQ {
-	//	var jobList []*jobsdb.JobT
-	//	var jobIDReqMap = make(map[uuid.UUID]*webRequestT)
-	//	var jobWriteKeyMap = make(map[uuid.UUID]string)
-	//	var writeKeyStats = make(map[string]int)
-	//	var writeKeySuccessStats = make(map[string]int)
-	//	var writeKeyFailStats = make(map[string]int)
-	//	var preDbStoreCount int
-	//	//Saving the event data read from req.request.Body to the splice.
-	//	//Using this to send event schema to the config backend.
-	//	var events []string
+// Function to batch incoming web requests
+func (gateway *HandleT) webRequestBatcher() {
+	var reqBuffer = make([]*webRequestT, 0)
+	for {
+		select {
+		case req := <-gateway.webRequestQ:
+			//Append to request buffer
+			reqBuffer = append(reqBuffer, req)
+			if len(reqBuffer) == maxBatchSize {
+				breq := batchWebRequestT{batchRequest: reqBuffer}
+				gateway.batchRequestQ <- &breq
+				reqBuffer = nil
+				reqBuffer = make([]*webRequestT, 0)
+			}
+		case <-time.After(batchTimeout):
+			if len(reqBuffer) > 0 {
+				breq := batchWebRequestT{batchRequest: reqBuffer}
+				gateway.batchRequestQ <- &breq
+				reqBuffer = nil
+				reqBuffer = make([]*webRequestT, 0)
+			}
+		}
+	}
+}
 
-	//batchTimeStat.Start()
-	//for _, req := range breq.batchRequest {
-	//	ipAddr := misc.GetIPFromReq(req.request)
-	//	if req.request.Body == nil {
-	//		req.done <- "Request body is nil"
-	//		preDbStoreCount++
-	//		continue
-	//	}
-	//	body, err := ioutil.ReadAll(req.request.Body)
-	//	req.request.Body.Close()
-	//
-	//	writeKey, _, ok := req.request.BasicAuth()
-	//	if !ok {
-	//		req.done <- "Failed to read writeKey from header"
-	//		preDbStoreCount++
-	//		misc.IncrementMapByKey(writeKeyFailStats, "noWriteKey")
-	//		continue
-	//	}
-	//
-	//	misc.IncrementMapByKey(writeKeyStats, writeKey)
-	//	if err != nil {
-	//		req.done <- "Failed to read body from request"
-	//		preDbStoreCount++
-	//		misc.IncrementMapByKey(writeKeyFailStats, writeKey)
-	//		continue
-	//	}
-	//	if len(body) > maxReqSize {
-	//		req.done <- "Request size exceeds max limit"
-	//		preDbStoreCount++
-	//		misc.IncrementMapByKey(writeKeyFailStats, writeKey)
-	//		continue
-	//	}
-	//	if !gateway.isWriteKeyEnabled(writeKey) {
-	//		req.done <- "Invalid Write Key"
-	//		preDbStoreCount++
-	//		misc.IncrementMapByKey(writeKeyFailStats, writeKey)
-	//		continue
-	//	}
-	//
-	//	// set anonymousId if not set in payload
-	//	var index int
-	//	result := gjson.GetBytes(body, "batch")
-	//	newAnonymousID := uuid.NewV4().String()
-	//	result.ForEach(func(_, _ gjson.Result) bool {
-	//		if !gjson.GetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index)).Exists() {
-	//			body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
-	//		}
-	//		index++
-	//		return true // keep iterating
-	//	})
-	//
-	//	if req.reqType != "batch" {
-	//		body, _ = sjson.SetBytes(body, "type", req.reqType)
-	//		body, _ = sjson.SetRawBytes(batchEvent, "batch.0", body)
-	//	}
-	//
-	//	logger.Debug("IP address is ", ipAddr)
-	//	body, _ = sjson.SetBytes(body, "requestIP", ipAddr)
-	//	body, _ = sjson.SetBytes(body, "writeKey", writeKey)
-	//	body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
-	//	events = append(events, fmt.Sprintf("%s", body))
-	//
-	//	id := uuid.NewV4()
-	//	//Should be function of body
-	//	newJob := jobsdb.JobT{
-	//		UUID:         id,
-	//		Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
-	//		CreatedAt:    time.Now(),
-	//		ExpireAt:     time.Now(),
-	//		CustomVal:    CustomVal,
-	//		EventPayload: []byte(body),
-	//	}
-	//	jobList = append(jobList, &newJob)
-	//	jobIDReqMap[newJob.UUID] = req
-	//	jobWriteKeyMap[newJob.UUID] = writeKey
-	//}
-	//
-	//errorMessagesMap := gateway.jobsDB.Store(jobList)
-	//misc.Assert(preDbStoreCount+len(errorMessagesMap) == len(breq.batchRequest))
-	//for uuid, err := range errorMessagesMap {
-	//	if err != "" {
-	//		misc.IncrementMapByKey(writeKeyFailStats, jobWriteKeyMap[uuid])
-	//	} else {
-	//		misc.IncrementMapByKey(writeKeySuccessStats, jobWriteKeyMap[uuid])
-	//	}
-	//	jobIDReqMap[uuid].done <- err
-	//}
-	//
-	////Sending events to config backend
-	//for _, event := range events {
-	//	sourcedebugger.RecordEvent(gjson.Get(event, "writeKey").Str, event)
-	//}
-	//
-	//batchTimeStat.End()
-	//batchSizeStat.Count(len(breq.batchRequest))
-	//updateWriteKeyStats(writeKeyStats)
-	//updateWriteKeyStatusStats(writeKeySuccessStats, true)
-	//updateWriteKeyStatusStats(writeKeyFailStats, false)
+func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
+	gateway.webRequestQ = make(chan *webRequestT)
+	gateway.startWebHandler()
+
+}
+
+func (gateway *HandleT) startWebHandler() {
+	log.Print("Starting web handler")
+
+	r := gin.Default()
+	r.Use(gin.Recovery())
+
+	r.POST("/collect", collect)
+
+	CORSMiddleware()
+
+	serverPort := viper.GetString("SERVER_PORT")
+
+	err := r.Run(":" + serverPort)
+
+	if err != nil {
+		println(err.Error())
+		return
+	}
+}
+func collect(c *gin.Context) {
+
+	c.JSON(200, gin.H{
+		"status": "RECEIVED",
+	})
+}
+
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
 }
