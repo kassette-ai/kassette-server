@@ -4,10 +4,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
+	"io"
+	"kassette.ai/kassette-server/backendconfig"
+	"kassette.ai/kassette-server/errors"
 	"kassette.ai/kassette-server/jobs"
+	"kassette.ai/kassette-server/response"
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +23,8 @@ var (
 	enabledWriteKeysSourceMap                 map[string]string
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
+
+	writeKeysSourceMap map[string]backendconfig.SourceT
 )
 
 func loadConfig() {
@@ -46,10 +53,12 @@ type HandleT struct {
 }
 
 type webRequestT struct {
-	request *http.Request
-	writer  *http.ResponseWriter
-	done    chan<- string
-	reqType string
+	done           chan<- string
+	reqType        string
+	requestPayload []byte
+	writeKey       string
+	ipAddr         string
+	userIDHeader   string
 }
 
 // Basic worker unit that works on incoming webRequests.
@@ -93,7 +102,7 @@ func (gateway *HandleT) webRequestBatcher() {
 }
 
 func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
-	gateway.webRequestQ = make(chan *webRequestT)
+	gateway.webRequestQ = make(chan *webRequestT, viper.GetInt("Gateway.maxWebReqQSize"))
 	gateway.startWebHandler()
 
 }
@@ -104,7 +113,8 @@ func (gateway *HandleT) startWebHandler() {
 	r := gin.Default()
 	r.Use(gin.Recovery())
 
-	r.POST("/collect", collect)
+	//r.POST("/web", webPageHandler)
+	r.POST("/extract", gateway.extractHandler)
 
 	CORSMiddleware()
 
@@ -117,11 +127,80 @@ func (gateway *HandleT) startWebHandler() {
 		return
 	}
 }
-func collect(c *gin.Context) {
 
-	c.JSON(200, gin.H{
-		"status": "RECEIVED",
-	})
+func (gateway *HandleT) extractHandler(c *gin.Context) {
+	gateway.ProcessRequest(c, "extract")
+}
+
+func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
+	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
+	if err != nil {
+		log.Println("Error getting payload and write key")
+		return
+	}
+	done := make(chan string, 1)
+	req := webRequestT{done: done, reqType: reqType, requestPayload: payload, writeKey: writeKey, ipAddr: c.Request.RemoteAddr, userIDHeader: c.Request.Header.Get("X-User-ID")}
+	gateway.webRequestQ <- &req
+
+	// TODO: Should wait here until response is processed
+	//errorMessage := <-done
+	atomic.AddUint64(&gateway.ackCount, 1)
+	//if errorMessage != "" {
+	//	log.Printf(errorMessage)
+	//	c.JSON(400, gin.H{"status": errorMessage})
+	//} else {
+	//	log.Printf(respMessage)
+	//	c.JSON(200, gin.H{"status": respMessage})
+	//}
+
+	// Remove this when the downstream worker is complete
+	log.Printf(respMessage)
+	c.JSON(200, gin.H{"status": respMessage})
+}
+
+func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
+	var err error
+	writeKey, _, ok := r.BasicAuth()
+	sourceID := gateway.getSourceIDForWriteKey(writeKey)
+	if !ok {
+		println("Basic auth failed")
+	}
+	payload, err := gateway.getPayloadFromRequest(r)
+	if err != nil {
+		println("Error getting payload from request with source: " + sourceID)
+
+		return []byte{}, writeKey, err
+	}
+	return payload, writeKey, err
+}
+
+func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return []byte{}, errors.New(response.RequestBodyNil)
+	}
+
+	payload, err := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if err != nil {
+		log.Println(
+			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
+			r.Header.Get("Content-Length"),
+			string(payload),
+		)
+		return payload, errors.New(response.RequestBodyReadFailed)
+	}
+	return payload, nil
+}
+
+func (*HandleT) getSourceIDForWriteKey(writeKey string) string {
+	configSubscriberLock.RLock()
+	defer configSubscriberLock.RUnlock()
+
+	if _, ok := writeKeysSourceMap[writeKey]; ok {
+		return writeKeysSourceMap[writeKey].ID
+	}
+
+	return ""
 }
 
 func CORSMiddleware() gin.HandlerFunc {
