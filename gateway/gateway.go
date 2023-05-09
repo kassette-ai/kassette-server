@@ -114,10 +114,12 @@ type batchWebRequestT struct {
 
 // Function to batch incoming web requests
 func (gateway *HandleT) webRequestBatcher() {
+
 	var reqBuffer = make([]*webRequestT, 0)
 	for {
 		select {
 		case req := <-gateway.webRequestQ:
+			print("Received request")
 			//Append to request buffer
 			reqBuffer = append(reqBuffer, req)
 			if len(reqBuffer) == maxBatchSize {
@@ -138,15 +140,22 @@ func (gateway *HandleT) webRequestBatcher() {
 }
 
 func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
-	gateway.webRequestQ = make(chan *webRequestT, viper.GetInt("Gateway.maxWebReqQSize"))
-	gateway.startWebHandler()
+	loadConfig()
+	gateway.webRequestQ = make(chan *webRequestT)
+	gateway.batchRequestQ = make(chan *batchWebRequestT)
+
 	gateway.jobsDB = jobsDB
 
 	gateway.userWorkerBatchRequestQ = make(chan *userWorkerBatchRequestT, maxDBBatchSize)
 	gateway.batchUserWorkerBatchRequestQ = make(chan *batchUserWorkerBatchRequestT, maxDBWriterProcess)
 
-	gateway.webRequestBatcher()
-	//TODO : Add batcher for userWorkerBatchRequestQ
+	go gateway.webRequestBatcher()
+
+	for i := 0; i < maxDBWriterProcess; i++ {
+		go gateway.webRequestBatchDBWriter(i)
+	}
+
+	gateway.startWebHandler()
 }
 
 func (gateway *HandleT) startWebHandler() {
@@ -185,7 +194,11 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	gateway.webRequestQ <- &req
 
 	// TODO: Should wait here until response is processed
-	//errorMessage := <-done
+	errorMessage := <-done
+	if errorMessage != "" {
+		c.JSON(500, gin.H{"status": errorMessage})
+		return
+	}
 	atomic.AddUint64(&gateway.ackCount, 1)
 
 	// Remove this when the downstream worker is complete
@@ -201,7 +214,7 @@ func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	//	println("Basic auth failed")
 	//}
 
-	writeKey := "test"
+	writeKey := "camunda"
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
 		println("Error getting payload from request with source: " + writeKey)
@@ -385,7 +398,7 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 	if req.reqType != "batch" {
 		body, err = sjson.SetBytes(body, "type", req.reqType)
 		if err != nil {
-			err = errors.New(response.NotRudderEvent)
+			err = errors.New(response.NotKassetteEvent)
 			return
 		}
 		body, _ = sjson.SetRawBytes(BatchEvent, "batch.0", body)
@@ -419,7 +432,7 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 	for idx, v := range eventsBatch {
 		toSet, ok := v.Value().(map[string]interface{})
 		if !ok {
-			err = errors.New(response.NotRudderEvent)
+			err = errors.New(response.NotKassetteEvent)
 			return
 		}
 
@@ -624,7 +637,9 @@ func setRandomMessageIDWhenEmpty(event map[string]interface{}) {
 // The  writer of the batch request to the DB.
 // Listens on the channel and sends the done response back
 func (gateway *HandleT) webRequestBatchDBWriter(process int) {
+	log.Println("Starting batch request DB writer, process:", process)
 	for breq := range gateway.batchRequestQ {
+		log.Println("Batch request received")
 		var jobList []*jobsdb.JobT
 		var jobIDReqMap = make(map[uuid.UUID]*webRequestT)
 		var jobWriteKeyMap = make(map[uuid.UUID]string)

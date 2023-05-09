@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/spf13/viper"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -152,17 +153,15 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	//If no DS present, add one
 	// this will be configurable in the future
 	if len(jd.datasetList) == 0 {
-		jd.addNewDS(true, "camunda")
-		jd.addNewDS(true, "web")
+		jd.addNewDS(true, dataSetT{})
 	}
 
-	go jd.mainCheckLoop()
 }
 
 func GetConnectionString() string {
-	return fmt.Sprintf("host=%s port=%d user=%s "+
+	return fmt.Sprintf("host=%s port=%s user=%s "+
 		"password=%s dbname=%s sslmode=disable",
-		viper.Get("POSTGRES_USER"),
+		viper.Get("POSTGRES_HOST"),
 		viper.Get("POSTGRES_PORT"),
 		viper.Get("POSTGRES_USER"),
 		viper.Get("POSTGRES_PASSWORD"),
@@ -191,10 +190,6 @@ func (jd *HandleT) setupEnumTypes(psqlInfo string) {
 	if err != nil {
 		log.Fatal("Failed to setup enum types", err)
 	}
-}
-
-func (jd *HandleT) mainCheckLoop() {
-
 }
 
 /*
@@ -239,6 +234,16 @@ func (jd *HandleT) getDSList(refreshFromDB bool) []dataSetT {
 		}
 	}
 
+	//Create the structure
+	for _, dnum := range dnumList {
+		jobName, _ := jobNameMap[dnum]
+
+		jobStatusName, _ := jobStatusNameMap[dnum]
+		jd.datasetList = append(jd.datasetList,
+			dataSetT{JobTable: jobName,
+				JobStatusTable: jobStatusName, Index: dnum})
+	}
+
 	return jd.datasetList
 }
 
@@ -266,13 +271,13 @@ func (jd *HandleT) getAllTableNames() []string {
 	return tableNames
 }
 
-func (jd *HandleT) addNewDS(appendLast bool, source string) dataSetT {
+func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT) dataSetT {
 
-	newDS := dataSetT{
-		JobTable:       source + "_jobs",
-		JobStatusTable: source + "_job_status",
-		Index:          "0",
-	}
+	newDSIdx := "1"
+
+	var newDS dataSetT
+	newDS.JobTable, newDS.JobStatusTable = jd.createTableNames(newDSIdx)
+	newDS.Index = newDSIdx
 
 	//Create the jobs and job_status tables
 	sqlStatement := fmt.Sprintf(`CREATE TABLE %s (
@@ -298,7 +303,15 @@ func (jd *HandleT) addNewDS(appendLast bool, source string) dataSetT {
 
 	//This is the migration case. We don't yet update the in-memory list till
 	//we finish the migration
+	_, _ = jd.dbHandle.Exec(sqlStatement)
+
 	return newDS
+}
+
+func (jd *HandleT) createTableNames(dsIdx string) (string, string) {
+	jobTable := fmt.Sprintf("%s_jobs_%s", jd.tablePrefix, dsIdx)
+	jobStatusTable := fmt.Sprintf("%s_job_status_%s", jd.tablePrefix, dsIdx)
+	return jobTable, jobStatusTable
 }
 
 func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
@@ -362,7 +375,7 @@ Store call is used to create new Jobs
 */
 func (jd *HandleT) Store(jobList []*JobT) map[uuid.UUID]string {
 
-	dsList := jd.getDSList(false)
+	dsList := jd.getDSList(true)
 	return jd.storeJobsDS(dsList[len(dsList)-1], false, true, jobList)
 }
 
@@ -413,4 +426,19 @@ func (jd *HandleT) storeJobsDS(ds dataSetT, copyID bool, retryEach bool, jobList
 	}
 
 	return
+}
+
+func (jd *HandleT) mapDSToLevel(ds dataSetT) (int, []int) {
+	indexStr := strings.Split(ds.Index, "_")
+	if len(indexStr) == 1 {
+		indexLevel0, _ := strconv.Atoi(indexStr[0])
+
+		return 1, []int{indexLevel0}
+	}
+
+	indexLevel0, _ := strconv.Atoi(indexStr[0])
+
+	indexLevel1, _ := strconv.Atoi(indexStr[1])
+
+	return 2, []int{indexLevel0, indexLevel1}
 }

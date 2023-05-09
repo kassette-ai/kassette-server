@@ -50,8 +50,8 @@ const (
 	ErrorInParseForm = "Error during parsing form"
 	// ErrorInParseMultiform - Error during parsing multiform
 	ErrorInParseMultiform = "Error during parsing multiform"
-	// NotRudderEvent = Event is not a Valid Rudder Event
-	NotRudderEvent = "Event is not a valid rudder event"
+	// NotKassetteEvent = Event is not a Valid Rudder Event
+	NotKassetteEvent = "Event is not a valid kassette event"
 	// ContextDeadlineExceeded - context deadline exceeded
 	ContextDeadlineExceeded = "context deadline exceeded"
 	// GatewayTimeout - Gateway timeout
@@ -85,7 +85,7 @@ var statusMap = map[string]status{
 	ErrorInMarshal:                                 {message: ErrorInMarshal, code: http.StatusBadRequest},
 	ErrorInParseForm:                               {message: ErrorInParseForm, code: http.StatusBadRequest},
 	ErrorInParseMultiform:                          {message: ErrorInParseMultiform, code: http.StatusBadRequest},
-	NotRudderEvent:                                 {message: NotRudderEvent, code: http.StatusBadRequest},
+	NotKassetteEvent:                               {message: NotKassetteEvent, code: http.StatusBadRequest},
 	ContextDeadlineExceeded:                        {message: GatewayTimeout, code: http.StatusGatewayTimeout},
 }
 
