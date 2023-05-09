@@ -25,8 +25,9 @@ func main() {
 	// source environment variables
 	//setupPostgres()
 	var gatewayDB jobsdb.HandleT
-	var gateway gateway.HandleT
+	gatewayDB.Setup(false, "gw", 0, false)
 
+	var gateway gateway.HandleT
 	gateway.Setup(&gatewayDB)
 
 }

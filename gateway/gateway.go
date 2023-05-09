@@ -140,10 +140,13 @@ func (gateway *HandleT) webRequestBatcher() {
 func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
 	gateway.webRequestQ = make(chan *webRequestT, viper.GetInt("Gateway.maxWebReqQSize"))
 	gateway.startWebHandler()
+	gateway.jobsDB = jobsDB
 
 	gateway.userWorkerBatchRequestQ = make(chan *userWorkerBatchRequestT, maxDBBatchSize)
 	gateway.batchUserWorkerBatchRequestQ = make(chan *batchUserWorkerBatchRequestT, maxDBWriterProcess)
 
+	gateway.webRequestBatcher()
+	//TODO : Add batcher for userWorkerBatchRequestQ
 }
 
 func (gateway *HandleT) startWebHandler() {
@@ -618,4 +621,67 @@ func setRandomMessageIDWhenEmpty(event map[string]interface{}) {
 	}
 }
 
-//Setup initializes this module
+// The  writer of the batch request to the DB.
+// Listens on the channel and sends the done response back
+func (gateway *HandleT) webRequestBatchDBWriter(process int) {
+	for breq := range gateway.batchRequestQ {
+		var jobList []*jobsdb.JobT
+		var jobIDReqMap = make(map[uuid.UUID]*webRequestT)
+		var jobWriteKeyMap = make(map[uuid.UUID]string)
+		var preDbStoreCount int
+		//Saving the event data read from req.request.Body to the splice.
+		//Using this to send event schema to the config backend.
+		var events []string
+		for _, req := range breq.batchRequest {
+
+			if req.requestPayload == nil {
+				req.done <- "Request body is nil"
+				preDbStoreCount++
+				continue
+			}
+			body := req.requestPayload
+
+			writeKey := "write_key"
+
+			// set anonymousId if not set in payload
+			var index int
+			result := gjson.GetBytes(body, "batch")
+			newAnonymousID := uuid.New().String()
+			result.ForEach(func(_, _ gjson.Result) bool {
+				if !gjson.GetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index)).Exists() {
+					body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
+				}
+				index++
+				return true // keep iterating
+			})
+
+			if req.reqType != "batch" {
+				body, _ = sjson.SetBytes(body, "type", req.reqType)
+			}
+
+			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
+			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
+			events = append(events, fmt.Sprintf("%s", body))
+
+			id := uuid.New()
+			//Should be function of body
+			newJob := jobsdb.JobT{
+				UUID:         id,
+				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
+				CreatedAt:    time.Now(),
+				ExpireAt:     time.Now(),
+				CustomVal:    CustomVal,
+				EventPayload: []byte(body),
+			}
+			jobList = append(jobList, &newJob)
+			jobIDReqMap[newJob.UUID] = req
+			jobWriteKeyMap[newJob.UUID] = writeKey
+		}
+
+		errorMessagesMap := gateway.jobsDB.Store(jobList)
+		for uuid, err := range errorMessagesMap {
+			jobIDReqMap[uuid].done <- err
+		}
+
+	}
+}

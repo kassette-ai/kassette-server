@@ -9,8 +9,10 @@ import (
 	"github.com/lib/pq"
 	"github.com/spf13/viper"
 	"log"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type JobT struct {
@@ -144,34 +146,17 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	err = jd.dbHandle.Ping()
 
 	jd.setupEnumTypes(psqlInfo)
-	//jd.setupJournal()
-	//jd.recoverFromJournal()
 
-	//Refresh in memory list. We don't take lock
-	//here because this is called before anything
-	//else
-	//jd.getDSList(true)
-	//jd.getDSRangeList(true)
+	jd.getDSList(true)
 
-	////If no DS present, add one
-	//if len(jd.datasetList) == 0 {
-	//	jd.addNewDS(true, dataSetT{})
-	//}
+	//If no DS present, add one
+	// this will be configurable in the future
+	if len(jd.datasetList) == 0 {
+		jd.addNewDS(true, "camunda")
+		jd.addNewDS(true, "web")
+	}
 
-	//if jd.toBackup {
-	//	jd.jobsFileUploader, err = fileuploader.NewFileUploader(&fileuploader.SettingsT{
-	//		Provider:       "s3",
-	//		AmazonS3Bucket: config.GetEnv("JOBS_BACKUP_BUCKET", ""),
-	//	})
-	//	jd.assertError(err)
-	//	jd.jobStatusFileUploader, err = fileuploader.NewFileUploader(&fileuploader.SettingsT{
-	//		Provider:       "s3",
-	//		AmazonS3Bucket: config.GetEnv("JOB_STATUS_BACKUP_BUCKET", ""),
-	//	})
-	//	jd.assertError(err)
-	//	go jd.backupDSLoop()
-	//}
-	//go jd.mainCheckLoop()
+	go jd.mainCheckLoop()
 }
 
 func GetConnectionString() string {
@@ -208,9 +193,118 @@ func (jd *HandleT) setupEnumTypes(psqlInfo string) {
 	}
 }
 
+func (jd *HandleT) mainCheckLoop() {
+
+}
+
+/*
+Function to return an ordered list of datasets and datasetRanges
+Most callers use the in-memory list of dataset and datasetRanges
+Caller must have the dsListLock readlocked
+*/
+func (jd *HandleT) getDSList(refreshFromDB bool) []dataSetT {
+
+	if !refreshFromDB {
+		return jd.datasetList
+	}
+
+	//At this point we MUST have write-locked dsListLock
+	//since we are modiying the list
+
+	//Reset the global list
+	jd.datasetList = nil
+
+	//Read the table names from PG
+	tableNames := jd.getAllTableNames()
+
+	//Tables are of form jobs_ and job_status_. Iterate
+	//through them and sort them to produce and
+	//ordered list of datasets
+
+	jobNameMap := map[string]string{}
+	jobStatusNameMap := map[string]string{}
+	dnumList := []string{}
+
+	for _, t := range tableNames {
+		if strings.HasPrefix(t, jd.tablePrefix+"_jobs_") {
+			dnum := t[len(jd.tablePrefix+"_jobs_"):]
+			jobNameMap[dnum] = t
+			dnumList = append(dnumList, dnum)
+			continue
+		}
+		if strings.HasPrefix(t, jd.tablePrefix+"_job_status_") {
+			dnum := t[len(jd.tablePrefix+"_job_status_"):]
+			jobStatusNameMap[dnum] = t
+			continue
+		}
+	}
+
+	return jd.datasetList
+}
+
+// Function to get all table names form Postgres
+func (jd *HandleT) getAllTableNames() []string {
+	//Read the table names from PG
+	stmt, _ := jd.dbHandle.Prepare(`SELECT tablename
+                                        FROM pg_catalog.pg_tables
+                                        WHERE schemaname != 'pg_catalog' AND
+                                        schemaname != 'information_schema'`)
+
+	defer stmt.Close()
+
+	rows, _ := stmt.Query()
+	defer rows.Close()
+
+	tableNames := []string{}
+	for rows.Next() {
+		var tbName string
+		_ = rows.Scan(&tbName)
+
+		tableNames = append(tableNames, tbName)
+	}
+
+	return tableNames
+}
+
+func (jd *HandleT) addNewDS(appendLast bool, source string) dataSetT {
+
+	newDS := dataSetT{
+		JobTable:       source + "_jobs",
+		JobStatusTable: source + "_job_status",
+		Index:          "0",
+	}
+
+	//Create the jobs and job_status tables
+	sqlStatement := fmt.Sprintf(`CREATE TABLE %s (
+                                      job_id BIGSERIAL PRIMARY KEY,
+                                      uuid UUID NOT NULL,
+									  parameters JSONB NOT NULL,
+                                      custom_val VARCHAR(64) NOT NULL,
+                                      event_payload JSONB NOT NULL,
+                                      created_at TIMESTAMP NOT NULL,
+                                      expire_at TIMESTAMP NOT NULL);`, newDS.JobTable)
+
+	_, _ = jd.dbHandle.Exec(sqlStatement)
+
+	sqlStatement = fmt.Sprintf(`CREATE TABLE %s (
+                                     id BIGSERIAL PRIMARY KEY,
+                                     job_id INT REFERENCES %s(job_id),
+                                     job_state job_state_type,
+                                     attempt SMALLINT,
+                                     exec_time TIMESTAMP,
+                                     retry_time TIMESTAMP,
+                                     error_code VARCHAR(32),
+                                     error_response JSONB);`, newDS.JobStatusTable, newDS.JobTable)
+
+	//This is the migration case. We don't yet update the in-memory list till
+	//we finish the migration
+	return newDS
+}
+
 func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 
-	sqlStatement := fmt.Sprintf(`INSERT INTO %s (uuid, custom_val, parameters, event_payload, created_at, expire_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING job_id`, ds.JobTable)
+	sqlStatement := fmt.Sprintf(`INSERT INTO %s (uuid, custom_val, parameters, event_payload, created_at, expire_at)
+                                       VALUES ($1, $2, $3, $4, $5, $6) RETURNING job_id`, ds.JobTable)
 	stmt, err := jd.dbHandle.Prepare(sqlStatement)
 
 	defer stmt.Close()
@@ -221,9 +315,102 @@ func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 		return
 	}
 	pqErr := err.(*pq.Error)
+	log.Fatal("Failed to store job", pqErr)
+	return
+}
 
-	if pqErr.Fatal() {
-		log.Fatal("Fatal error while storing job", err)
+func (jd *HandleT) updateJobStatusDS(ds dataSetT, statusList []*JobStatusT, customValFilters []string) (err error) {
+
+	if len(statusList) == 0 {
+		return nil
 	}
+
+	txn, err := jd.dbHandle.Begin()
+
+	stmt, err := txn.Prepare(pq.CopyIn(ds.JobStatusTable, "job_id", "job_state", "attempt", "exec_time",
+		"retry_time", "error_code", "error_response"))
+
+	defer stmt.Close()
+	for _, status := range statusList {
+		//  Handle the case when google analytics returns gif in response
+		if !utf8.ValidString(string(status.ErrorResponse)) {
+			status.ErrorResponse, _ = json.Marshal("{}")
+		}
+		_, err = stmt.Exec(status.JobID, status.JobState, status.AttemptNum, status.ExecTime,
+			status.RetryTime, status.ErrorCode, string(status.ErrorResponse))
+
+	}
+	_, err = stmt.Exec()
+
+	err = txn.Commit()
+
+	//Get all the states and clear from empty cache
+	stateFiltersMap := map[string]bool{}
+	for _, st := range statusList {
+		stateFiltersMap[st.JobState] = true
+	}
+	stateFilters := make([]string, 0, len(stateFiltersMap))
+	for k := range stateFiltersMap {
+		stateFilters = append(stateFilters, k)
+	}
+
+	return nil
+}
+
+/*
+Store call is used to create new Jobs
+*/
+func (jd *HandleT) Store(jobList []*JobT) map[uuid.UUID]string {
+
+	dsList := jd.getDSList(false)
+	return jd.storeJobsDS(dsList[len(dsList)-1], false, true, jobList)
+}
+
+func (jd *HandleT) storeJobsDS(ds dataSetT, copyID bool, retryEach bool, jobList []*JobT) (errorMessagesMap map[uuid.UUID]string) {
+
+	var stmt *sql.Stmt
+	var err error
+
+	//Using transactions for bulk copying
+	txn, err := jd.dbHandle.Begin()
+
+	errorMessagesMap = make(map[uuid.UUID]string)
+
+	if copyID {
+		stmt, err = txn.Prepare(pq.CopyIn(ds.JobTable, "job_id", "uuid", "parameters", "custom_val",
+			"event_payload", "created_at", "expire_at"))
+
+	} else {
+		stmt, err = txn.Prepare(pq.CopyIn(ds.JobTable, "uuid", "parameters", "custom_val", "event_payload",
+			"created_at", "expire_at"))
+	}
+
+	defer stmt.Close()
+	for _, job := range jobList {
+		if retryEach {
+			errorMessagesMap[job.UUID] = ""
+		}
+		if copyID {
+			_, err = stmt.Exec(job.JobID, job.UUID, job.Parameters, job.CustomVal,
+				string(job.EventPayload), job.CreatedAt, job.ExpireAt)
+		} else {
+			_, err = stmt.Exec(job.UUID, job.Parameters, job.CustomVal, string(job.EventPayload),
+				job.CreatedAt, job.ExpireAt)
+		}
+
+	}
+	_, err = stmt.Exec()
+	if err != nil && retryEach {
+		txn.Rollback() // rollback started txn, to prevent dangling db connection
+		for _, job := range jobList {
+			errorMessage := jd.storeJobDS(ds, job)
+			errorMessagesMap[job.UUID] = errorMessage
+		}
+	} else {
+
+		err = txn.Commit()
+
+	}
+
 	return
 }
