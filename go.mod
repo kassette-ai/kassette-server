@@ -9,6 +9,11 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/lib/pq v1.10.9
 	github.com/spf13/viper v1.15.0
+	github.com/tidwall/gjson v1.14.4
+	github.com/tidwall/sjson v1.2.5
+	golang.org/x/sync v0.1.0
+	gorm.io/driver/postgres v1.5.0
+	gorm.io/gorm v1.25.0
 )
 
 require (
@@ -39,6 +44,8 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	golang.org/x/arch v0.3.0 // indirect
@@ -49,6 +56,4 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/driver/postgres v1.5.0 // indirect
-	gorm.io/gorm v1.25.0 // indirect
 )

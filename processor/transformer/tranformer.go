@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	jsoniter "github.com/json-iterator/go"
+	"sync"
 )
 
 type MetadataT struct {
@@ -82,4 +83,20 @@ type ValidationErrorT struct {
 	Type    string            `json:"type"`
 	Message string            `json:"message"`
 	Meta    map[string]string `json:"meta"`
+}
+
+type transformerHandleT struct {
+	requestQ   chan *transformMessageT
+	responseQ  chan *transformMessageT
+	accessLock sync.Mutex
+	//perfStats    *misc.PerfStats
+	//sentStat     *stats.RudderStats
+	//receivedStat *stats.RudderStats
+	//failedStat   *stats.RudderStats
+}
+
+type transformMessageT struct {
+	index int
+	data  interface{}
+	url   string
 }

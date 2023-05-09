@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
+	"github.com/spf13/viper"
+	"log"
 	"sync"
 	"time"
 )
@@ -111,4 +115,115 @@ type dataSetRangeT struct {
 	startTime int64
 	endTime   int64
 	ds        dataSetT
+}
+
+/*
+Setup is used to initialize the HandleT structure.
+clearAll = True means it will remove all existing tables
+tablePrefix must be unique and is used to separate
+multiple users of JobsDB
+dsRetentionPeriod = A DS is not deleted if it has some activity
+in the retention time
+*/
+func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time.Duration, toBackup bool) {
+
+	var err error
+	psqlInfo := GetConnectionString()
+
+	jd.tablePrefix = tablePrefix
+	//jd.dsRetentionPeriod = retentionPeriod
+	//jd.toBackup = toBackup
+	//jd.dsEmptyResultCache = map[dataSetT]map[string]map[string]bool{}
+
+	jd.dbHandle, err = sql.Open("postgres", psqlInfo)
+	if err != nil {
+		log.Fatal("Failed to open DB connection", err)
+	}
+
+	log.Println("Connected to DB")
+	err = jd.dbHandle.Ping()
+
+	jd.setupEnumTypes(psqlInfo)
+	//jd.setupJournal()
+	//jd.recoverFromJournal()
+
+	//Refresh in memory list. We don't take lock
+	//here because this is called before anything
+	//else
+	//jd.getDSList(true)
+	//jd.getDSRangeList(true)
+
+	////If no DS present, add one
+	//if len(jd.datasetList) == 0 {
+	//	jd.addNewDS(true, dataSetT{})
+	//}
+
+	//if jd.toBackup {
+	//	jd.jobsFileUploader, err = fileuploader.NewFileUploader(&fileuploader.SettingsT{
+	//		Provider:       "s3",
+	//		AmazonS3Bucket: config.GetEnv("JOBS_BACKUP_BUCKET", ""),
+	//	})
+	//	jd.assertError(err)
+	//	jd.jobStatusFileUploader, err = fileuploader.NewFileUploader(&fileuploader.SettingsT{
+	//		Provider:       "s3",
+	//		AmazonS3Bucket: config.GetEnv("JOB_STATUS_BACKUP_BUCKET", ""),
+	//	})
+	//	jd.assertError(err)
+	//	go jd.backupDSLoop()
+	//}
+	//go jd.mainCheckLoop()
+}
+
+func GetConnectionString() string {
+	return fmt.Sprintf("host=%s port=%d user=%s "+
+		"password=%s dbname=%s sslmode=disable",
+		viper.Get("POSTGRES_USER"),
+		viper.Get("POSTGRES_PORT"),
+		viper.Get("POSTGRES_USER"),
+		viper.Get("POSTGRES_PASSWORD"),
+		viper.Get("POSTGRES_DB"))
+}
+
+func (jd *HandleT) setupEnumTypes(psqlInfo string) {
+
+	dbHandle, err := sql.Open("postgres", psqlInfo)
+	defer dbHandle.Close()
+
+	sqlStatement := `DO $$ BEGIN
+                                CREATE TYPE job_state_type
+                                     AS ENUM(
+                                              'waiting',
+                                              'executing',
+                                              'succeeded',
+                                              'waiting_retry',
+                                              'failed',
+                                              'aborted');
+                                     EXCEPTION
+                                        WHEN duplicate_object THEN null;
+                            END $$;`
+
+	_, err = dbHandle.Exec(sqlStatement)
+	if err != nil {
+		log.Fatal("Failed to setup enum types", err)
+	}
+}
+
+func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
+
+	sqlStatement := fmt.Sprintf(`INSERT INTO %s (uuid, custom_val, parameters, event_payload, created_at, expire_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING job_id`, ds.JobTable)
+	stmt, err := jd.dbHandle.Prepare(sqlStatement)
+
+	defer stmt.Close()
+
+	_, err = stmt.Exec(job.UUID, job.CustomVal, string(job.Parameters), string(job.EventPayload),
+		job.CreatedAt, job.ExpireAt)
+	if err == nil {
+		return
+	}
+	pqErr := err.(*pq.Error)
+
+	if pqErr.Fatal() {
+		log.Fatal("Fatal error while storing job", err)
+	}
+	return
 }
