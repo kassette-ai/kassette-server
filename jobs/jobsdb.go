@@ -436,7 +436,11 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []s
                                    WHERE %[1]s.job_id=job_latest_state.job_id`,
 			ds.JobTable, ds.JobStatusTable, stateQuery)
 		var err error
+
 		rows, err = jd.dbHandle.Query(sqlStatement)
+		if err != nil {
+			return nil, err
+		}
 		defer rows.Close()
 
 	} else {
@@ -477,6 +481,10 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []s
 			&job.LastJobStatus.JobState, &job.LastJobStatus.AttemptNum,
 			&job.LastJobStatus.ExecTime, &job.LastJobStatus.RetryTime,
 			&job.LastJobStatus.ErrorCode, &job.LastJobStatus.ErrorResponse)
+
+		if err != nil {
+			return nil, err
+		}
 
 		jobList = append(jobList, &job)
 	}
