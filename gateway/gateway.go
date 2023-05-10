@@ -183,6 +183,18 @@ func (gateway *HandleT) extractHandler(c *gin.Context) {
 	gateway.ProcessRequest(c, "extract")
 }
 
+func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) string {
+	done := make(chan string, 1)
+	req := webRequestT{done: done, requestPayload: []byte(payload), writeKey: writeKey}
+	gateway.webRequestQ <- &req
+
+	errorMessage := <-done
+	if errorMessage != "" {
+		return "Error processing request"
+	}
+	return "Success"
+}
+
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {

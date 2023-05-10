@@ -442,3 +442,72 @@ func (jd *HandleT) mapDSToLevel(ds dataSetT) (int, []int) {
 
 	return 2, []int{indexLevel0, indexLevel1}
 }
+
+func (jd *HandleT) getUnprocessedJobsDS(ds dataSetT, customValFilters []string,
+	order bool, count int, sourceIDFilters ...string) ([]*JobT, error) {
+
+	var rows *sql.Rows
+
+	var sqlStatement = fmt.Sprintf(`SELECT %[1]s.job_id, %[1]s.uuid, %[1]s.parameters, %[1]s.custom_val,
+                                               %[1]s.event_payload, %[1]s.created_at,
+                                               %[1]s.expire_at
+                                             FROM %[1]s WHERE %[1]s.job_id NOT IN (SELECT DISTINCT(%[2]s.job_id)
+                                             FROM %[2]s)`, ds.JobTable, ds.JobStatusTable)
+
+	if len(customValFilters) > 0 {
+		sqlStatement += " AND " + jd.constructQuery(fmt.Sprintf("%s.custom_val", ds.JobTable),
+			customValFilters, "OR")
+	}
+
+	if len(sourceIDFilters) > 0 {
+		sqlStatement += " AND " + jd.constructJSONQuery(fmt.Sprintf("%s.parameters", ds.JobTable), "source_id",
+			sourceIDFilters, "OR")
+	}
+
+	if order {
+		sqlStatement += fmt.Sprintf(" ORDER BY %s.job_id", ds.JobTable)
+	}
+	if count > 0 {
+		sqlStatement += fmt.Sprintf(" LIMIT %d", count)
+	}
+
+	rows, _ = jd.dbHandle.Query(sqlStatement)
+
+	defer rows.Close()
+
+	var jobList []*JobT
+	for rows.Next() {
+		var job JobT
+		err := rows.Scan(&job.JobID, &job.UUID, &job.Parameters, &job.CustomVal,
+			&job.EventPayload, &job.CreatedAt, &job.ExpireAt)
+		if err != nil {
+			return nil, err
+		}
+		jobList = append(jobList, &job)
+	}
+
+	if len(jobList) == 0 {
+		//jd.markClearEmptyResult(ds, []string{"NP"}, customValFilters, true)
+	}
+
+	return jobList, nil
+}
+
+func (jd *HandleT) constructQuery(paramKey string, paramList []string, queryType string) string {
+
+	var queryList []string
+	for _, p := range paramList {
+		queryList = append(queryList, "("+paramKey+"='"+p+"')")
+	}
+	return "(" + strings.Join(queryList, " "+queryType+" ") + ")"
+}
+
+func (jd *HandleT) constructJSONQuery(paramKey string, jsonKey string, paramList []string, queryType string) string {
+
+	var queryList []string
+	for _, p := range paramList {
+		queryList = append(queryList, "("+paramKey+"@>'{"+fmt.Sprintf(`"%s"`, jsonKey)+":"+fmt.Sprintf(`"%s"`, p)+"}')")
+
+	}
+	return "(" + strings.Join(queryList, " "+queryType+" ") + ")"
+}
