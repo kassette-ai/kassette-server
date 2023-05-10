@@ -44,6 +44,17 @@ type JobStatusT struct {
 	WorkspaceId   string          `json:"WorkspaceId"`
 }
 
+// constants for JobStatusT JobState
+const (
+	SucceededState    = "succeeded"
+	FailedState       = "failed"
+	ExecutingState    = "executing"
+	AbortedState      = "aborted"
+	WaitingState      = "waiting"
+	WaitingRetryState = "waiting_retry"
+	InternalState     = "NP"
+)
+
 // OwnerType for this jobsdb instance
 type OwnerType string
 
@@ -368,6 +379,177 @@ func (jd *HandleT) updateJobStatusDS(ds dataSetT, statusList []*JobStatusT, cust
 	}
 
 	return nil
+}
+
+func (jd *HandleT) GetToRetry(customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
+	return jd.GetProcessed([]string{FailedState}, customValFilters, count, sourceIDFilters...)
+}
+
+func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []string,
+	customValFilters []string, limitCount int, sourceIDFilters ...string) ([]*JobT, error) {
+
+	var stateQuery, customValQuery, limitQuery, sourceQuery string
+
+	if len(stateFilters) > 0 {
+		stateQuery = " AND " + jd.constructQuery("job_state", stateFilters, "OR")
+	} else {
+		stateQuery = ""
+	}
+	if len(customValFilters) > 0 {
+
+		customValQuery = " AND " +
+			jd.constructQuery(fmt.Sprintf("%s.custom_val", ds.JobTable),
+				customValFilters, "OR")
+	} else {
+		customValQuery = ""
+	}
+
+	if len(sourceIDFilters) > 0 {
+
+		sourceQuery += " AND " + jd.constructJSONQuery(fmt.Sprintf("%s.parameters", ds.JobTable), "source_id",
+			sourceIDFilters, "OR")
+	} else {
+		sourceQuery = ""
+	}
+
+	if limitCount > 0 {
+
+		limitQuery = fmt.Sprintf(" LIMIT %d ", limitCount)
+	} else {
+		limitQuery = ""
+	}
+
+	var rows *sql.Rows
+	if getAll {
+		sqlStatement := fmt.Sprintf(`SELECT
+                                  %[1]s.job_id, %[1]s.uuid, %[1]s.parameters,  %[1]s.custom_val, %[1]s.event_payload,
+                                  %[1]s.created_at, %[1]s.expire_at,
+                                  job_latest_state.job_state, job_latest_state.attempt,
+                                  job_latest_state.exec_time, job_latest_state.retry_time,
+                                  job_latest_state.error_code, job_latest_state.error_response
+                                 FROM
+                                  %[1]s,
+                                  (SELECT job_id, job_state, attempt, exec_time, retry_time,
+                                    error_code, error_response FROM %[2]s WHERE id IN
+                                    (SELECT MAX(id) from %[2]s GROUP BY job_id) %[3]s)
+                                  AS job_latest_state
+                                   WHERE %[1]s.job_id=job_latest_state.job_id`,
+			ds.JobTable, ds.JobStatusTable, stateQuery)
+		var err error
+		rows, err = jd.dbHandle.Query(sqlStatement)
+		defer rows.Close()
+
+	} else {
+		sqlStatement := fmt.Sprintf(`SELECT
+                                               %[1]s.job_id, %[1]s.uuid,  %[1]s.parameters, %[1]s.custom_val, %[1]s.event_payload,
+                                               %[1]s.created_at, %[1]s.expire_at,
+                                               job_latest_state.job_state, job_latest_state.attempt,
+                                               job_latest_state.exec_time, job_latest_state.retry_time,
+                                               job_latest_state.error_code, job_latest_state.error_response
+                                            FROM
+                                               %[1]s,
+                                               (SELECT job_id, job_state, attempt, exec_time, retry_time,
+                                                 error_code, error_response FROM %[2]s WHERE id IN
+                                                   (SELECT MAX(id) from %[2]s GROUP BY job_id) %[3]s)
+                                               AS job_latest_state
+                                            WHERE %[1]s.job_id=job_latest_state.job_id
+                                             %[4]s %[5]s
+                                             AND job_latest_state.retry_time < $1 ORDER BY %[1]s.job_id %[6]s`,
+			ds.JobTable, ds.JobStatusTable, stateQuery, customValQuery, sourceQuery, limitQuery)
+		// fmt.Println(sqlStatement)
+
+		stmt, err := jd.dbHandle.Prepare(sqlStatement)
+
+		if err != nil {
+			return nil, err
+		}
+
+		defer stmt.Close()
+		rows, err = stmt.Query(time.Now())
+		defer rows.Close()
+	}
+
+	var jobList []*JobT
+	for rows.Next() {
+		var job JobT
+		err := rows.Scan(&job.JobID, &job.UUID, &job.Parameters, &job.CustomVal,
+			&job.EventPayload, &job.CreatedAt, &job.ExpireAt,
+			&job.LastJobStatus.JobState, &job.LastJobStatus.AttemptNum,
+			&job.LastJobStatus.ExecTime, &job.LastJobStatus.RetryTime,
+			&job.LastJobStatus.ErrorCode, &job.LastJobStatus.ErrorResponse)
+
+		jobList = append(jobList, &job)
+	}
+
+	return jobList, nil
+}
+
+/*
+GetProcessed returns events of a given state. This does not update any state itself and
+relises on the caller to update it. That means that successive calls to GetProcessed("failed")
+can return the same set of events. It is the responsibility of the caller to call it from
+one thread, update the state (to "waiting") in the same thread and pass on the the processors
+*/
+func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
+
+	dsList := jd.getDSList(false)
+	outJobs := make([]*JobT, 0)
+
+	if count == 0 {
+		return outJobs
+	}
+
+	for _, ds := range dsList {
+		jobs, err := jd.getProcessedJobsDS(ds, false, stateFilter, customValFilters, count, sourceIDFilters...)
+		if err != nil {
+			log.Printf("Error getting processed jobs from ds: %s", ds.JobTable)
+			continue
+		}
+
+		outJobs = append(outJobs, jobs...)
+		count -= len(jobs)
+
+		if count == 0 {
+			break
+		}
+	}
+
+	return outJobs
+}
+
+func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
+
+	//The order of lock is very important. The mainCheckLoop
+	//takes lock in this order so reversing this will cause
+	//deadlocks
+	//jd.dsMigrationLock.RLock()
+	//jd.dsListLock.RLock()
+	//defer jd.dsMigrationLock.RUnlock()
+	//defer jd.dsListLock.RUnlock()
+
+	dsList := jd.getDSList(false)
+	outJobs := make([]*JobT, 0)
+
+	if count == 0 {
+		return outJobs
+	}
+	for _, ds := range dsList {
+
+		jobs, err := jd.getUnprocessedJobsDS(ds, customValFilters, true, count)
+		if err != nil {
+			log.Fatal("Failed to get unprocessed jobs", err)
+		}
+
+		outJobs = append(outJobs, jobs...)
+		count -= len(jobs)
+
+		if count == 0 {
+			break
+		}
+	}
+
+	//Release lock
+	return outJobs
 }
 
 /*

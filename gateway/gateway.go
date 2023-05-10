@@ -193,6 +193,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 		return "Error processing request"
 	}
 	return "Success"
+
 }
 
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
