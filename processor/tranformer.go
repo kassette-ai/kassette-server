@@ -1,8 +1,11 @@
-package transformer
+package processor
 
 import (
 	"context"
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"log"
+	"sort"
 	"sync"
 )
 
@@ -60,8 +63,9 @@ type Transformer interface {
 }
 
 type ResponseT struct {
-	Events       []TransformerResponseT
-	FailedEvents []TransformerResponseT
+	Events       []interface{}
+	Success      bool
+	SourceIDList []string
 }
 
 type TransformerEventT struct {
@@ -99,4 +103,114 @@ type transformMessageT struct {
 	index int
 	data  interface{}
 	url   string
+}
+
+// Transform function is used to invoke transformer API
+// Transformer is not thread safe. If performance becomes
+// an issue we can create multiple transformer instances
+// but given that they are hitting the same NodeJS
+// process it may not be an issue if batch sizes (len clientEvents)
+// are big enough to saturate NodeJS. Right now the transformer
+// instance is shared between both user specific transformation
+// code and destination transformation code.
+func (trans *transformerHandleT) Transform(clientEvents []interface{},
+	url string, batchSize int) ResponseT {
+
+	trans.accessLock.Lock()
+	defer trans.accessLock.Unlock()
+
+	var transformResponse = make([]*transformMessageT, 0)
+	//Enqueue all the jobs
+	inputIdx := 0
+	outputIdx := 0
+	totalSent := 0
+	reqQ := trans.requestQ
+	resQ := trans.responseQ
+
+	var toSendData interface{}
+	sourceIDList := []string{}
+	for _, clientEvent := range clientEvents {
+		sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["message"].(map[string]interface{})["source_id"].(string))
+	}
+
+	for {
+		//The channel is still live and the last batch has been sent
+		//Construct the next batch
+		if reqQ != nil && toSendData == nil {
+			if batchSize > 0 {
+				clientBatch := make([]interface{}, 0)
+				batchCount := 0
+				for {
+					if batchCount >= batchSize || inputIdx >= len(clientEvents) {
+						break
+					}
+					clientBatch = append(clientBatch, clientEvents[inputIdx])
+					batchCount++
+					inputIdx++
+				}
+				toSendData = clientBatch
+
+			} else {
+				toSendData = clientEvents[inputIdx]
+
+				inputIdx++
+			}
+		}
+
+		select {
+		//In case of batch event, index is the next Index
+		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, url: url}:
+			totalSent++
+			toSendData = nil
+			if inputIdx == len(clientEvents) {
+				reqQ = nil
+			}
+		case data := <-resQ:
+			transformResponse = append(transformResponse, data)
+			outputIdx++
+			//If all was sent and all was received we are done
+			if reqQ == nil && outputIdx == totalSent {
+				resQ = nil
+			}
+		}
+		if reqQ == nil && resQ == nil {
+			break
+		}
+	}
+
+	//Sort the responses in the same order as input
+	sort.Slice(transformResponse, func(i, j int) bool {
+		return transformResponse[i].index < transformResponse[j].index
+	})
+
+	outClientEvents := make([]interface{}, 0)
+	outClientEventsSourceIDs := []string{}
+
+	for idx, resp := range transformResponse {
+		if resp.data == nil {
+			continue
+		}
+		respArray, _ := resp.data.([]interface{})
+
+		//Transform is one to many mapping so returned
+		//response for each is an array. We flatten it out
+		for _, respElem := range respArray {
+			respElemMap, castOk := respElem.(map[string]interface{})
+			if castOk {
+				if statusCode, ok := respElemMap["statusCode"]; ok && fmt.Sprintf("%v", statusCode) == "400" {
+					log.Println("Transformer returned 400 for event: ", respElemMap["metadata"].(map[string]interface{})["source_id"].(string))
+					continue
+				}
+			}
+			outClientEvents = append(outClientEvents, respElem)
+			outClientEventsSourceIDs = append(outClientEventsSourceIDs, sourceIDList[idx])
+		}
+
+	}
+
+	return ResponseT{
+		Events:       outClientEvents,
+		Success:      true,
+		SourceIDList: outClientEventsSourceIDs,
+	}
 }

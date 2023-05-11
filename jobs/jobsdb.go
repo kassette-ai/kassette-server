@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/spf13/viper"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,6 +95,8 @@ type HandleT struct {
 	analyzeThreshold   int
 	MaxDSSize          *int
 	backgroundCancel   context.CancelFunc
+	dsListLock         sync.RWMutex
+	dsMigrationLock    sync.RWMutex
 
 	maxBackupRetryTime time.Duration
 
@@ -700,4 +703,159 @@ func (jd *HandleT) constructJSONQuery(paramKey string, jsonKey string, paramList
 
 	}
 	return "(" + strings.Join(queryList, " "+queryType+" ") + ")"
+}
+
+/*
+UpdateJobStatus updates the status of a batch of jobs
+customValFilters[] is passed so we can efficinetly mark empty cache
+Later we can move this to query
+*/
+func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []string) {
+
+	if len(statusList) == 0 {
+		return
+	}
+
+	//First we sort by JobID
+	sort.Slice(statusList, func(i, j int) bool {
+		return statusList[i].JobID < statusList[j].JobID
+	})
+
+	//The order of lock is very important. The mainCheckLoop
+	//takes lock in this order so reversing this will cause
+	//deadlocks
+	jd.dsMigrationLock.RLock()
+	jd.dsListLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
+	defer jd.dsListLock.RUnlock()
+
+	//We scan through the list of jobs and map them to DS
+	var lastPos int
+	dsRangeList := jd.getDSRangeList(false)
+	for _, ds := range dsRangeList {
+		//minID := ds.minJobID
+		maxID := ds.maxJobID
+		//We have processed upto (but excluding) lastPos on statusList.
+		//Hence that element must lie in this or subsequent dataset's
+		//range
+
+		var i int
+		for i = lastPos; i < len(statusList); i++ {
+			//The JobID is outside this DS's range
+			if statusList[i].JobID > maxID {
+				if i > lastPos {
+
+				}
+				err := jd.updateJobStatusDS(ds.ds, statusList[lastPos:i], customValFilters)
+				if err != nil {
+					//We have already marked this as empty
+					log.Fatal(err)
+				}
+
+				lastPos = i
+				break
+			}
+		}
+		//Reached the end. Need to process this range
+		if i == len(statusList) && lastPos < i {
+
+			err := jd.updateJobStatusDS(ds.ds, statusList[lastPos:i], customValFilters)
+			if err != nil {
+				//We have already marked this as empty
+				log.Fatal(err)
+			}
+
+			lastPos = i
+			break
+		}
+	}
+
+	//The last (most active DS) might not have range element as it is being written to
+	if lastPos < len(statusList) {
+		//Make sure the last range is missing
+		dsList := jd.getDSList(false)
+		//Update status in the last element
+		err := jd.updateJobStatusDS(dsList[len(dsList)-1], statusList[lastPos:], customValFilters)
+		if err != nil {
+			log.Println("Error updating job status", err)
+		}
+
+	}
+
+}
+
+// Function must be called with read-lock held in dsListLock
+func (jd *HandleT) getDSRangeList(refreshFromDB bool) []dataSetRangeT {
+
+	var minID, maxID sql.NullInt64
+
+	if !refreshFromDB {
+		return jd.datasetRangeList
+	}
+
+	//At this point we must have write-locked dsListLock
+	dsList := jd.getDSList(true)
+	jd.datasetRangeList = nil
+
+	for idx, ds := range dsList {
+
+		sqlStatement := fmt.Sprintf(`SELECT MIN(job_id), MAX(job_id) FROM %s`, ds.JobTable)
+		row := jd.dbHandle.QueryRow(sqlStatement)
+		err := row.Scan(&minID, &maxID)
+		if err != nil {
+			log.Fatal("Error getting min/max job_id", err)
+			continue
+		}
+
+		//We store ranges EXCEPT for the last element
+		//which is being actively written to.
+		if idx < len(dsList)-1 {
+
+			jd.datasetRangeList = append(jd.datasetRangeList,
+				dataSetRangeT{minJobID: int64(minID.Int64),
+					maxJobID: int64(maxID.Int64), ds: ds})
+
+		}
+	}
+	return jd.datasetRangeList
+}
+
+/*
+Function to sort table suffixes. We should not have any use case
+for having > 2 len suffixes (e.g. 1_1_1 - see comment below)
+but this sort handles the general case
+*/
+func (jd *HandleT) sortDnumList(dnumList []string) {
+	sort.Slice(dnumList, func(i, j int) bool {
+		src := strings.Split(dnumList[i], "_")
+		dst := strings.Split(dnumList[j], "_")
+		k := 0
+		for {
+			if k >= len(src) {
+				//src has same prefix but is shorter
+				//For example, src=1.1 while dest=1.1.1
+
+				return true
+			}
+			if k >= len(dst) {
+				//Opposite of case above
+
+				return false
+			}
+			if src[k] == dst[k] {
+				//Loop
+				k++
+				continue
+			}
+			//Strictly ordered. Return
+			srcInt, err := strconv.Atoi(src[k])
+			if err != nil {
+				log.Fatal("Error converting to int", src[k])
+			}
+
+			dstInt, err := strconv.Atoi(dst[k])
+
+			return srcInt < dstInt
+		}
+	})
 }
