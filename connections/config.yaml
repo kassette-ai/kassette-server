@@ -1,0 +1,11 @@
+---
+database:
+  host: localhost
+  user: agent
+  name: camunda
+  password: password
+  port: 5432
+  ssl_mode: disable
+
+
+

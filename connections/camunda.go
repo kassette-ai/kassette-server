@@ -23,16 +23,21 @@ type ActivitiInstance struct {
 func GetConnectionString() string {
 	return fmt.Sprintf("host=%s port=%s user=%s "+
 		"password=%s dbname=%s sslmode=%s",
-		viper.Get("POSTGRES_HOST"),
-		viper.Get("POSTGRES_PORT"),
-		viper.Get("POSTGRES_USER"),
-		viper.Get("POSTGRES_PASSWORD"),
-		viper.Get("POSTGRES_DB"),
-		viper.Get("POSTGRES_SSL_MODE"))
+		viper.GetString("database.host"),
+		viper.GetString("database.port"),
+		viper.GetString("database.user"),
+		viper.GetString("database.password"),
+		viper.GetString("database.name"),
+		viper.GetString("database.ssl_mode"))
 }
 
 func main() {
-	viper.SetConfigFile(".env")
+	// Load Config file
+	viper.SetConfigFile("config.yaml")
+	viper.SetConfigType("yaml")
+	// Load configuration from environment variables
+	viper.AutomaticEnv()
+
 	verr := viper.ReadInConfig()
 	if verr != nil {
 		log.Println(verr)
