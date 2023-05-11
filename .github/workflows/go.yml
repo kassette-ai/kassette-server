@@ -22,7 +22,7 @@ jobs:
         go-version: 1.20
 
     - name: Build
-      run: go build  -o connections/kassette-agent connections/camunda.go 
+      run: cd connections && go mod init kassete-agent && go mod tidy && go build
 
     - name: docker build
       run:  docker build . --file Dockerfile --tag ${{ env.IMAGE_NAME }}:latest
