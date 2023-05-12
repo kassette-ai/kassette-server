@@ -1,0 +1,24 @@
+---
+database:
+  host: localhost
+  user: kassette_user
+  name: kassette
+  password: password
+  port: 5432
+  ssl_mode: disable
+
+
+
+
+gateway:
+  webPort: 8080
+  maxBatchSize: 32
+  batchTimeoutInMS: 2000
+  maxDBWriterProcess: 4
+  maxReqSizeInKB: 1000000
+  maxWebReqQSize: 1
+
+
+logLevel: INFO
+serverPort: 8088
+
