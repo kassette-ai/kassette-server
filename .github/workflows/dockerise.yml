@@ -1,10 +1,7 @@
 name: publish Docker
 
-on:
-  pull_request:
-    types:
-    - closed
-    branches: [ "main" ]
+on: workflow_dispatch
+
 
 env:
   AGENT_IMAGE_NAME: metaops/kassette-agent
