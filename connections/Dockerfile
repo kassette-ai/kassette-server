@@ -1,0 +1,8 @@
+FROM scratch
+ARG COMPILED_ARTEFACT=kassete-agent
+
+COPY $COMPILED_ARTEFACT /
+USER 1001
+ENTRYPOINT ["/kassette-agent"]
+
+

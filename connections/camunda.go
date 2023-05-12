@@ -1,109 +1,102 @@
-package connections
-
-//Put in your worker here
+package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
-	"strconv"
+	"log"
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/spf13/viper"
 )
 
-type Record struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Address string `json:"address"`
+type ActivitiInstance struct {
+	Id_         int    `json:"id_"`
+	Act_name_   string `json:"act_name_"`
+	Start_time_ string `json:"start_time_"`
+	End_time_   string `json:"end_time_"`
+	Act_type_   string `json:"act_type_"`
+	Assignee_   string `json:"assignee_"`
+}
+
+func GetConnectionString() string {
+	return fmt.Sprintf("host=%s port=%s user=%s "+
+		"password=%s dbname=%s sslmode=%s",
+		viper.GetString("database.host"),
+		viper.GetString("database.port"),
+		viper.GetString("database.user"),
+		viper.GetString("database.password"),
+		viper.GetString("database.name"),
+		viper.GetString("database.ssl_mode"))
 }
 
 func main() {
+	// Load Config file
+	viper.SetConfigFile("config.yaml")
+	viper.SetConfigType("yaml")
+	// Load configuration from environment variables
+	viper.AutomaticEnv()
 
-	host := os.Getenv("POSTGRES_HOST")
-	port, err := strconv.Atoi(os.Getenv("POSTGRES_PORT"))
-	if err != nil {
-		fmt.Println("Error, invalid port value:", err)
+	verr := viper.ReadInConfig()
+	if verr != nil {
+		log.Println(verr)
 		return
 	}
 
-	user := os.Getenv("POSTGRES_USER")
-	password := os.Getenv("POSTGRES_PASSWORD")
-	dbname := os.Getenv("POSTGRES_DB")
+	psqlInfo := GetConnectionString()
 
-	tickerSecs, err := strconv.Atoi(os.Getenv("TICKER"))
+	log.Printf("Connecting to Database: %s\n", psqlInfo)
 
+	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
-		fmt.Println("Error, invalid ticker value:", err)
-		return
-	}
-
-	connectionString := fmt.Sprintf("postgres",
-		"host=%s port=%s"+
-			"user=%s password=%s "+
-			"dbname=%s sslmode=disable", host, port, user, password, dbname)
-
-	// Connect to the database
-	db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		fmt.Println("Error connecting to database:", err)
-		return
+		log.Fatal(err)
 	}
 	defer db.Close()
 
-	// Create a ticker that polls the database every 10 seconds
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	stmt, err := db.Prepare(fmt.Sprintf("SELECT * FROM act_hi_actinst WHERE id_ > $1;"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	// Start the infinite loop
+	lastID := 0
 	for {
-		select {
-		case <-ticker.C:
-			// Query the database for new records
-			rows, err := db.Query("SELECT * FROM mytable WHERE processed = false")
-			if err != nil {
-				fmt.Println("Error querying database:", err)
+		// Query the table for new records
+		rows, err := stmt.Query(lastID)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		// Process the new records
+		for rows.Next() {
+			var activitiInstance ActivitiInstance
+			if err := rows.Scan(&activitiInstance.Id_, &activitiInstance.Act_name_, &activitiInstance.Start_time_, &activitiInstance.End_time_, &activitiInstance.Act_type_, &activitiInstance.Assignee_); err != nil {
+				log.Println(err)
 				continue
 			}
-			defer rows.Close()
 
-			// Process the new records
-			for rows.Next() {
-				var record Record
-				err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Address)
-				if err != nil {
-					fmt.Println("Error reading row:", err)
-					continue
-				}
-
-				// Send the record to the REST endpoint
-				url := "https://myapi.com/records"
-				payload, err := json.Marshal(record)
-				if err != nil {
-					fmt.Println("Error marshaling record:", err)
-					continue
-				}
-
-				resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
-				if err != nil {
-					fmt.Println("Error sending record to API:", err)
-					continue
-				}
-				defer resp.Body.Close()
-
-				// Mark the record as processed
-				_, err = db.Exec("UPDATE mytable SET processed = true WHERE id = ?", record.ID)
-				if err != nil {
-					fmt.Println("Error updating row:", err)
-					continue
-				}
-
-				// Print a message indicating that the record was processed
-				fmt.Printf("Processed record: id=%d, name=%s, email=%s, address=%s\n", record.ID, record.Name, record.Email, record.Address)
+			log.Printf("New record: id=%d, name=%s", activitiInstance.Id_, activitiInstance.Act_name_)
+			if activitiInstance.Id_ > lastID {
+				lastID = activitiInstance.Id_
 			}
+
+			// convert object to a JSON string
+			jsonActivitiInstance, err := json.Marshal(activitiInstance)
+			if err != nil {
+				panic(err.Error())
+			}
+
+			// Send data to Kafka topic
+			fmt.Println(string(jsonActivitiInstance))
+
 		}
+
+		// Close the rows object
+		rows.Close()
+
+		// Wait for a short period of time before polling again
+		time.Sleep(5 * time.Second)
 	}
 }
