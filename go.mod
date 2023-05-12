@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/bugsnag/bugsnag-go v2.2.0+incompatible
-	github.com/confluentinc/confluent-kafka-go v1.9.2
 	github.com/gin-gonic/gin v1.9.0
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12

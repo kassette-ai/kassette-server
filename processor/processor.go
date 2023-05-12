@@ -9,9 +9,7 @@ import (
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/gateway"
 	"kassette.ai/kassette-server/integrations"
-
 	jobsdb "kassette.ai/kassette-server/jobs"
-
 	"kassette.ai/kassette-server/misc"
 	"log"
 	"reflect"
@@ -45,11 +43,27 @@ type HandleT struct {
 	userPQLock     sync.Mutex
 }
 
+func loadConfig() {
+
+	processSessions = true
+	rawDataDestinations = []string{"S3"}
+}
+
 // Setup initializes the module
 func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, batchRouterDB *jobsdb.HandleT) {
+	loadConfig()
 	proc.gatewayDB = gatewayDB
 	proc.routerDB = routerDB
 	proc.batchRouterDB = batchRouterDB
+
+	proc.gatewayDB = gatewayDB
+	proc.routerDB = routerDB
+	proc.batchRouterDB = batchRouterDB
+	proc.transformer = &transformerHandleT{}
+	proc.userJobListMap = make(map[string][]*jobsdb.JobT)
+	proc.userEventsMap = make(map[string][]interface{})
+	proc.userPQItemMap = make(map[string]*pqItemT)
+	proc.userJobPQ = make(pqT, 0)
 
 	go proc.mainLoop()
 	if processSessions {
@@ -63,8 +77,7 @@ func (proc *HandleT) mainLoop() {
 	for {
 
 		toQuery := 10
-		//Should not have any failure while processing (in v0) so
-		//retryList should be empty. Remove the assert
+
 		retryList := proc.gatewayDB.GetToRetry([]string{gateway.CustomVal}, toQuery)
 		//
 		unprocessedList := proc.gatewayDB.GetUnprocessed([]string{gateway.CustomVal}, toQuery)
@@ -248,7 +261,6 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 
 	//XX: Need to do this in a transaction
 	proc.routerDB.Store(destJobs)
-	proc.batchRouterDB.Store(batchDestJobs)
 	proc.gatewayDB.UpdateJobStatus(statusList, []string{gateway.CustomVal})
 	//XX: End of transaction
 

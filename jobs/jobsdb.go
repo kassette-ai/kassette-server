@@ -135,6 +135,14 @@ type dataSetRangeT struct {
 }
 
 /*
+GetWaiting returns events which are under processing
+This is a wrapper over GetProcessed call above
+*/
+func (jd *HandleT) GetWaiting(customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
+	return jd.GetProcessed([]string{WaitingState}, customValFilters, count, sourceIDFilters...)
+}
+
+/*
 Setup is used to initialize the HandleT structure.
 clearAll = True means it will remove all existing tables
 tablePrefix must be unique and is used to separate

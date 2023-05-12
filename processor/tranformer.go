@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"kassette.ai/kassette-server/backendconfig"
 	"log"
 	"sort"
 	"sync"
@@ -70,8 +71,8 @@ type ResponseT struct {
 
 type TransformerEventT struct {
 	//Message     types.SingularEventT       `json:"message"`
-	Metadata MetadataT `json:"metadata"`
-	//Destination backendconfig.DestinationT `json:"destination"`
+	Metadata    MetadataT                  `json:"metadata"`
+	Destination backendconfig.DestinationT `json:"destination"`
 	//Libraries   []backendconfig.LibraryT   `json:"libraries"`
 }
 
@@ -106,13 +107,7 @@ type transformMessageT struct {
 }
 
 // Transform function is used to invoke transformer API
-// Transformer is not thread safe. If performance becomes
-// an issue we can create multiple transformer instances
-// but given that they are hitting the same NodeJS
-// process it may not be an issue if batch sizes (len clientEvents)
-// are big enough to saturate NodeJS. Right now the transformer
-// instance is shared between both user specific transformation
-// code and destination transformation code.
+// Transformer is not thread safe. So we need to create a new instance for each request
 func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	url string, batchSize int) ResponseT {
 

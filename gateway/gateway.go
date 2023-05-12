@@ -180,7 +180,7 @@ func (gateway *HandleT) startWebHandler() {
 }
 
 func (gateway *HandleT) extractHandler(c *gin.Context) {
-	gateway.ProcessRequest(c, "extract")
+	gateway.ProcessRequest(c, "single")
 }
 
 func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) string {
@@ -685,6 +685,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 
 			if req.reqType != "batch" {
 				body, _ = sjson.SetBytes(body, "type", req.reqType)
+				body, _ = sjson.SetRawBytes(batchEvent, "batch.0", body)
 			}
 
 			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
@@ -713,3 +714,10 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 
 	}
 }
+
+var batchEvent = []byte(`
+	{
+		"batch": [
+		]
+	}
+`)
