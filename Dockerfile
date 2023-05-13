@@ -14,6 +14,7 @@ RUN chown -R kassette:kassette /opt/kassette-ai/
 
 USER kassette
 
+WORKDIR /opt/kassette-ai/
 
 ENTRYPOINT ["/opt/kassette-ai/kassette-server"]
 
