@@ -1,9 +1,20 @@
 FROM ubuntu:18.04
 
-COPY kassette-server /
-RUN chmod 0755 /kassette-server
 
-USER 1001
-ENTRYPOINT ["/kassette-server"]
+RUN groupadd -r kassette -g 435
+RUN useradd -u 435 -r -g kassette -s /sbin/nologin -c "Docker image user" kassette
+
+
+RUN mkdir -p /opt/kassette-ai
+COPY kassette-server /opt/kassette-ai/
+
+RUN chmod 0755 /opt/kassette-ai/kassette-server
+RUN chown -R kassette:kassette /opt/metaops/kassette-agent/kassette-agent
+
+
+USER kassette
+
+
+ENTRYPOINT ["/opt/kassette-ai/kassette-server"]
 
 
