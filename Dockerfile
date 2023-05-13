@@ -9,7 +9,7 @@ RUN mkdir -p /opt/kassette-ai
 COPY kassette-server /opt/kassette-ai/
 
 RUN chmod 0755 /opt/kassette-ai/kassette-server
-RUN chown -R kassette:kassette /opt/metaops/kassette-agent/kassette-agent
+RUN chown -R kassette:kassette /opt/kassette-ai/
 
 
 USER kassette
