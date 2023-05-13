@@ -1,4 +1,4 @@
-FROM alpine:3.18.0
+FROM ubuntu:18.04
 
 COPY kassette-server /
 RUN chmod 0755 /kassette-server
