@@ -7,12 +7,11 @@ jobs:
     runs-on: self-hosted  
     steps:
     - name: 'Deploy'
-      uses: 'deliverybot/helm@v1'
+      uses: 'azure/setup-helm@v3'
       with: 
-        namespace: 'kassette-dev'
-        chart: 'metaops/kassette-server'
-        repo: 'https://metaops-solutions.github.io/helm-charts'
-        repo-alias: 'metaops'
-        release: 'kassette-server'
-        token: '${{ github.token }}'
+        token: ${{ secrets.GITHUB_TOKEN }}
+      id: install
+    - name: add metaops helm repo
+      run: helm repo add metaops https://metaops-solutions.github.io/helm-charts
+    - name: upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server
 
