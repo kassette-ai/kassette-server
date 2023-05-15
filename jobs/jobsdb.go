@@ -183,11 +183,11 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 func GetConnectionString() string {
 	return fmt.Sprintf("host=%s port=%s user=%s "+
 		"password=%s dbname=%s sslmode=disable",
-		viper.Get("POSTGRES_HOST"),
-		viper.Get("POSTGRES_PORT"),
-		viper.Get("POSTGRES_USER"),
-		viper.Get("POSTGRES_PASSWORD"),
-		viper.Get("POSTGRES_DB"))
+		viper.GetString("database.host"),
+		viper.GetString("database.port"),
+		viper.GetString("database.user"),
+		viper.GetString("database.password"),
+		viper.GetString("database.name"))
 }
 
 func (jd *HandleT) setupEnumTypes(psqlInfo string) {

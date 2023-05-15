@@ -2,12 +2,13 @@ name: Go compile
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "andrey" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "andrey" ]
 
 env:
-  IMAGE_NAME: metaops/kassette-server
+  AGENT_IMAGE_NAME: metaops/kassette-agent
+  SERVER_IMAGE_NAME: metaops/kassette-server
 
 
 jobs:
@@ -19,19 +20,18 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: 1.20
+        go-version: 1.20.4
+    - run: go version
 
-    - name: Build
-      run: go build -mod=mod main.go
+    - name: cleanup the build files if any
+      run: find . -name go.sum -o -name go.mod -delete
 
-    - name: docker build
-      run:  docker build . --file Dockerfile --tag ${{ env.IMAGE_NAME }}:latest
+    - name: cleanup the build artefacts if any
+      run: rm -f kassette-server connections/kassete-agent
 
-    - name: docker login
-      if: github.event_name != 'pull_request'
-      run: docker login $DOCKER_REGISTRY -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASSWORD
+    - name: Build kassette-server
+      run: go mod init kassette.ai/kassette-server && go mod tidy && go build
 
-    - name: docker push
-      if: github.event_name != 'pull_request'
-      run: docker push ${{ env.IMAGE_NAME }}:latest
+    - name: Build kassette-agent
+      run: cd connections && go mod init kassette.ai/kassete-agent && go mod tidy && go build
 

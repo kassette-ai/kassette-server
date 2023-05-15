@@ -55,18 +55,18 @@ var (
 func loadConfig() {
 
 	//Port where GW is running
-	webPort = viper.GetInt("Gateway.webPort")
+	webPort = viper.GetInt("gateway.webPort")
 	//Number of incoming requests that are batched before initiating write
-	maxBatchSize = viper.GetInt("Gateway.maxBatchSize")
+	maxBatchSize = viper.GetInt("gateway.maxBatchSize")
 	//Timeout after which batch is formed anyway with whatever requests
 	//are available
-	batchTimeout = (viper.GetDuration("Gateway.batchTimeoutInMS") * time.Millisecond)
+	batchTimeout = (viper.GetDuration("gateway.batchTimeoutInMS") * time.Millisecond)
 	//Multiple DB writers are used to write data to DB
-	maxDBWriterProcess = viper.GetInt("Gateway.maxDBWriterProcess")
+	maxDBWriterProcess = viper.GetInt("gateway.maxDBWriterProcess")
 	// CustomVal is used as a key in the jobsDB customval column
 
 	// Maximum request size to gateway
-	maxReqSize = viper.GetInt("Gateway.maxReqSizeInKB") * 1000
+	maxReqSize = viper.GetInt("gateway.maxReqSizeInKB") * 1000
 }
 
 type userWorkerBatchRequestT struct {
@@ -170,7 +170,7 @@ func (gateway *HandleT) startWebHandler() {
 
 	CORSMiddleware()
 
-	serverPort := viper.GetString("SERVER_PORT")
+	serverPort := viper.GetString("serverPort")
 
 	err := r.Run(":" + serverPort)
 
