@@ -215,8 +215,6 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	}
 	atomic.AddUint64(&gateway.ackCount, 1)
 
-	// Remove this when the downstream worker is complete
-	Logger.Error(respMessage)
 	c.JSON(200, gin.H{"status": respMessage})
 }
 
