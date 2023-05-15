@@ -15,6 +15,7 @@ import (
 	"kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
+	. "kassette.ai/kassette-server/utils"
 	"log"
 	"net/http"
 	"regexp"
@@ -119,7 +120,7 @@ func (gateway *HandleT) webRequestBatcher() {
 	for {
 		select {
 		case req := <-gateway.webRequestQ:
-			print("Received request")
+			Logger.Info("Received web request")
 			//Append to request buffer
 			reqBuffer = append(reqBuffer, req)
 			if len(reqBuffer) == maxBatchSize {
@@ -159,7 +160,7 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
 }
 
 func (gateway *HandleT) startWebHandler() {
-	log.Print("Starting web handler")
+	Logger.Info("Starting web handler")
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
@@ -199,7 +200,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {
-		log.Println("Error getting payload and write key")
+		Logger.Error("Error getting payload and write key")
 		return
 	}
 	done := make(chan string, 1)
@@ -215,7 +216,7 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	atomic.AddUint64(&gateway.ackCount, 1)
 
 	// Remove this when the downstream worker is complete
-	log.Printf(respMessage)
+	Logger.Error(respMessage)
 	c.JSON(200, gin.H{"status": respMessage})
 }
 
@@ -230,7 +231,7 @@ func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	writeKey := "camunda"
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
-		println("Error getting payload from request with source: " + writeKey)
+		Logger.Error("Error getting payload from request with source: " + writeKey)
 
 		return []byte{}, writeKey, err
 	}
@@ -245,10 +246,10 @@ func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
 	payload, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 	if err != nil {
-		log.Println(
+		Logger.Error(fmt.Sprint(
 			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
 			r.Header.Get("Content-Length"),
-			string(payload),
+			string(payload)),
 		)
 		return payload, errors.New(response.RequestBodyReadFailed)
 	}
@@ -298,7 +299,7 @@ func (gateway *HandleT) runUserWebRequestWorkers(ctx context.Context) {
 func (gateway *HandleT) initUserWebRequestWorkers() {
 	userWebRequestWorkers = make([]*userWebRequestWorkerT, maxUserWebRequestWorkerProcess)
 	for i := 0; i < maxUserWebRequestWorkerProcess; i++ {
-		log.Println("User Web Request Worker Started", i)
+		Logger.Info(fmt.Sprint("User Web Request Worker Started", i))
 		userWebRequestWorker := &userWebRequestWorkerT{
 			webRequestQ:   make(chan *webRequestT, maxUserWebRequestBatchSize),
 			batchRequestQ: make(chan *batchWebRequestT),
@@ -542,11 +543,8 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 	}
 	marshalledParams, err := json.Marshal(params)
 	if err != nil {
-		log.Println("[Gateway] Failed to marshal parameters map. Parameters: %+v", params)
-		//gateway.logger.Errorf(
-		//	"[Gateway] Failed to marshal parameters map. Parameters: %+v",
-		//	params,
-		//)
+		Logger.Error(fmt.Sprint("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
+
 		marshalledParams = []byte(
 			`{"error": "rudder-server gateway failed to marshal params"}`,
 		)
@@ -650,7 +648,7 @@ func setRandomMessageIDWhenEmpty(event map[string]interface{}) {
 // The  writer of the batch request to the DB.
 // Listens on the channel and sends the done response back
 func (gateway *HandleT) webRequestBatchDBWriter(process int) {
-	log.Println("Starting batch request DB writer, process:", process)
+	Logger.Info(fmt.Sprint("Starting batch request DB writer, process:", process))
 	for breq := range gateway.batchRequestQ {
 		log.Println("Batch request received")
 		var jobList []*jobsdb.JobT
@@ -676,8 +674,8 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			result := gjson.GetBytes(body, "batch")
 			newAnonymousID := uuid.New().String()
 			result.ForEach(func(_, _ gjson.Result) bool {
-				if !gjson.GetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index)).Exists() {
-					body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
+				if !gjson.GetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index)).Exists() {
+					body, _ = sjson.SetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index), newAnonymousID)
 				}
 				index++
 				return true // keep iterating
@@ -690,13 +688,13 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 
 			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
 			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
-			events = append(events, fmt.Sprintf("%s", body))
+			events = append(events, fmt.Sprint("%s", body))
 
 			id := uuid.New()
 			//Should be function of body
 			newJob := jobsdb.JobT{
 				UUID:         id,
-				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
+				Parameters:   []byte(fmt.Sprint(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
 				CreatedAt:    time.Now(),
 				ExpireAt:     time.Now(),
 				CustomVal:    CustomVal,

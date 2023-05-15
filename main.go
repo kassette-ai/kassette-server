@@ -36,6 +36,8 @@ func main() {
 		return
 	}
 
+	utils.Logger.Info("Starting Kassette Server")
+
 	// source environment variables
 	//setupPostgres()
 	var gatewayDB jobsdb.HandleT

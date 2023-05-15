@@ -1,14 +1,14 @@
 package backendconfig
 
 import (
-	"kassette.ai/kassette-server/utils"
+	"io"
+	. "kassette.ai/kassette-server/utils"
 	"log"
 )
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"reflect"
 	"time"
@@ -21,7 +21,7 @@ var (
 	initialized                          bool
 )
 
-var Eb *utils.EventBus
+var Eb *EventBus
 
 type SourcesT struct {
 	Sources []SourceT `json:"sources"`
@@ -40,11 +40,11 @@ func getBackendConfig() (SourcesT, bool) {
 
 	var respBody []byte
 	if resp != nil && resp.Body != nil {
-		respBody, _ = ioutil.ReadAll(resp.Body)
+		respBody, _ = io.ReadAll(resp.Body)
 		defer resp.Body.Close()
 	}
 	if err != nil {
-		log.Println("Errored when sending request to the server", err)
+		Logger.Error(fmt.Sprintf("Errored when sending request to the server", err))
 		return SourcesT{}, false
 	}
 	var sourcesJSON SourcesT
@@ -80,7 +80,7 @@ func GetConfig() SourcesT {
 	return curSourceJSON
 }
 
-func Subscribe(channel chan utils.DataEvent) {
+func Subscribe(channel chan DataEvent) {
 	Eb.Subscribe("backendconfig", channel)
 	Eb.PublishToChannel(channel, "backendconfig", curSourceJSON)
 }
@@ -97,6 +97,6 @@ func WaitForConfig() {
 
 // Setup backend config
 func Setup() {
-	Eb = new(utils.EventBus)
+	Eb = new(EventBus)
 	go pollConfigUpdate()
 }

@@ -11,6 +11,7 @@ import (
 	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
+	. "kassette.ai/kassette-server/utils"
 	"log"
 	"reflect"
 	"sort"
@@ -67,7 +68,7 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 
 	go proc.mainLoop()
 	if processSessions {
-		log.Println("Starting session processor")
+		Logger.Info("Starting session processor")
 		go proc.createSessions()
 	}
 }
@@ -161,7 +162,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 				destTypes := integrations.GetDestinationIDs(singularEvent, destTypesFromConfig)
 
 				if len(destTypes) == 0 {
-					log.Println("No enabled destinations")
+					Logger.Info("No enabled destinations")
 					continue
 				}
 				enabledDestinationsMap := map[string][]backendconfig.DestinationT{}
@@ -170,7 +171,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 					enabledDestinationsMap[destType] = enabledDestinationsList
 					// Adding a singular event multiple times if there are multiple destinations of same type
 					if len(destTypes) == 0 {
-						log.Println("No enabled destinations for type %v", destType)
+						Logger.Info(fmt.Sprint("No enabled destinations for type %v", destType))
 						continue
 					}
 					for _, destination := range enabledDestinationsList {
@@ -223,10 +224,10 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		//Call transform for this destination. Returns
 		//the JSON we can send to the destination
 		url := integrations.GetDestinationURL(destID)
-		log.Println("Transform input size", len(destEventList))
+		Logger.Info(fmt.Sprint("Transform input size", len(destEventList)))
 		response := proc.transformer.Transform(destEventList, url, transformBatchSize)
 		destTransformEventList := response.Events
-		log.Println("Transform output size", len(destTransformEventList))
+		Logger.Info(fmt.Sprint("Transform output size", len(destTransformEventList)))
 		if !response.Success {
 			continue
 		}
@@ -245,7 +246,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			sourceID := response.SourceIDList[idx]
 			newJob := jobsdb.JobT{
 				UUID:         id,
-				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, sourceID)),
+				Parameters:   []byte(fmt.Sprint(`{"source_id": "%v"}`, sourceID)),
 				CreatedAt:    time.Now(),
 				ExpireAt:     time.Now(),
 				CustomVal:    destID,
@@ -299,7 +300,7 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 		}
 		userID, ok := misc.GetKassetteEventUserID(eventList)
 		if !ok {
-			log.Println("Failed to get userID for job")
+			Logger.Error("Failed to get userID for job")
 			continue
 		}
 		_, ok = proc.userJobListMap[userID]
@@ -333,7 +334,7 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 	if len(processUserIDs) > 0 {
 		userJobsToProcess := make(map[string][]*jobsdb.JobT)
 		userEventsToProcess := make(map[string][]interface{})
-		log.Println("Post Add Processing")
+		Logger.Info("Post Add Processing")
 
 		//We clear the data structure for these users
 		for userID := range processUserIDs {
@@ -344,7 +345,7 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 			proc.userJobPQ.Remove(proc.userPQItemMap[userID])
 			delete(proc.userPQItemMap, userID)
 		}
-		log.Println("Processing")
+		Logger.Info("Processing")
 		proc.Print()
 		//We release the block before actually processing
 		proc.userPQLock.Unlock()
