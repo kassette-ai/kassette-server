@@ -195,6 +195,45 @@ func GetKassetteEventMap(kassetteEvent interface{}) (map[string]interface{}, boo
 	return kassetteEventMap, true
 }
 
+// Copy copies the exported fields from src to dest
+// Used for copying the default transport
+func Copy(dst, src interface{}) {
+	srcV := reflect.ValueOf(src)
+	dstV := reflect.ValueOf(dst)
+
+	// First src and dst must be pointers, so that dst can be assignable.
+	if srcV.Kind() != reflect.Ptr {
+		panic("Copy: src must be a pointer")
+	}
+	if dstV.Kind() != reflect.Ptr {
+		panic("Copy: dst must be a pointer")
+	}
+	srcV = srcV.Elem()
+	dstV = dstV.Elem()
+
+	// Then src must be assignable to dst and both must be structs (but this is
+	// already guaranteed).
+	srcT := srcV.Type()
+	dstT := dstV.Type()
+	if !srcT.AssignableTo(dstT) {
+		panic("Copy not assignable to")
+	}
+	if srcT.Kind() != reflect.Struct || dstT.Kind() != reflect.Struct {
+		panic("Copy are not structs")
+	}
+
+	// Finally, copy all exported fields.  Since the types are the same, we
+	// have no problems and we only have to ignore unexported fields.
+	for i := 0; i < srcV.NumField(); i++ {
+		sf := dstT.Field(i)
+		if sf.PkgPath != "" {
+			// Unexported field.
+			continue
+		}
+		dstV.Field(i).Set(srcV.Field(i))
+	}
+}
+
 // Assert panics if false
 func Assert(cond bool) {
 	if !cond {

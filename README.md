@@ -6,7 +6,9 @@ With Kassette, you can build product data pipelines that connect your whole data
 
 ## Getting Started
 
+Setup a postgres DB with an Admin user and add to .env properties. Then simply run:
 
+```  go run main.go ```
 
 ### Installation
 
@@ -31,10 +33,10 @@ Configuration is done in app but the application can be scaled
 
 The Kassette architecture is composed of 2 main components:
 Kassette Server
-Contains a processor which accepts data, persists to kafka and then forwards to the transformer, get's a response and forwards to the destination.
+Contains a processor which accepts data, persists to Postgres in a dataset. This is a job queue which is then picked up by the processor. The processor figures out which transformations and destinations are relevant for the data, performs these actions and maintains a job status table.
 A transformer which accepts data from the gateway, collects context and then returns to the gateway which places the
 
 Kassette trasformer
-This is manages the sources, destinations and reports on health of the feeds
+This is manages the sources, destinations and reports on health of the feeds. It's a web portal into the data pipeline.
 
 
