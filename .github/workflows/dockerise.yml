@@ -33,7 +33,7 @@ jobs:
       run:  docker build . --file Dockerfile --tag ${{ env.SERVER_IMAGE_NAME }}:latest
 
     - name: Build kassette-agent
-      run: cd connections && go mod init kassette.ai/kassete-agent && go mod tidy && go build
+      run: cd connections && go mod init kassette.ai/kassette-agent && go mod tidy && go build
 
     - name: Build docker image for kassete-agent
       run:  cd connections && docker build . --file Dockerfile --tag ${{ env.AGENT_IMAGE_NAME }}:latest
