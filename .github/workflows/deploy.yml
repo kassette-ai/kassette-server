@@ -13,5 +13,6 @@ jobs:
       id: install
     - name: add metaops helm repo
       run: helm repo add metaops https://metaops-solutions.github.io/helm-charts
-    - name: upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server
+    - name: install release
+      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server
 
