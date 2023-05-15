@@ -1,10 +1,11 @@
-name: deploy Kubernetes
+name: deploy into Kubernetes
 
 on: workflow_dispatch
 
 jobs:
   deployment:
     runs-on: self-hosted  
+    steps:
     - name: 'Deploy'
       uses: 'deliverybot/helm@v1'
       with: 
@@ -13,3 +14,4 @@ jobs:
         repo: 'https://metaops-solutions.github.io/helm-charts'
         repo-alias: 'metaops'
         release: 'kassette-server'
+
