@@ -1,6 +1,6 @@
 name: deploy into Kubernetes
 
-on: workflow_dispatch
+on: ['deployment', 'workflow_dispatch' ]
 
 jobs:
   deployment:
