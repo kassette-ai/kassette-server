@@ -3,7 +3,7 @@ name: Agent deploy into Kubernetes
 on: ['deployment', 'workflow_dispatch' ]
 
 jobs:
-  deployment:
+  agent-deployment:
     runs-on: self-hosted  
     steps:
     - name: 'Agent Deploy'
