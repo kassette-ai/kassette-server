@@ -1,0 +1,15 @@
+name: deploy Kubernetes
+
+on: workflow_dispatch
+
+jobs:
+  deployment:
+    runs-on: self-hosted  
+    - name: 'Deploy'
+      uses: 'deliverybot/helm@v1'
+      with: 
+        namespace: kassette-dev
+        chart: 'metaops/kassette-server'
+        repo: 'https://metaops-solutions.github.io/helm-charts'
+        repo-alias: 'metaops'
+        release: 'kassette-server'

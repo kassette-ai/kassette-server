@@ -13,9 +13,11 @@ With Kassette, you can build product data pipelines that connect your whole data
 Kassette is available as a helm chart. You can run it using the following command:
 
 ```bash
-helm repo add kassette https://kassette-io.github.io/helm-charts
 
-helm install kassette kassette/kassette
+helm repo add metaops https://metaops-solutions.github.io/helm-charts
+
+helm install kassette-server metaops/kassette-server 
+
 ```
 
 ### Configuration
