@@ -1,4 +1,4 @@
-name: publish Docker
+name: publish server Docker
 
 on: workflow_dispatch
 
@@ -9,7 +9,7 @@ env:
 
 
 jobs:
-  build:
+  build-server:
     runs-on: self-hosted  
 
     steps:
@@ -32,19 +32,9 @@ jobs:
     - name: Build docker image for kassete-server
       run:  docker build . --file Dockerfile --tag ${{ env.SERVER_IMAGE_NAME }}:latest
 
-    - name: Build kassette-agent
-      run: cd connections && go mod init kassette.ai/kassette-agent && go mod tidy && go build
-
-    - name: Build docker image for kassete-agent
-      run:  cd connections && docker build . --file Dockerfile --tag ${{ env.AGENT_IMAGE_NAME }}:latest
-
     - name: docker login
       if: github.event_name != 'pull_request'
       run: docker login $DOCKER_REGISTRY -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASSWORD
-
-    - name: docker push agent
-      if: github.event_name != 'pull_request'
-      run: docker push ${{ env.AGENT_IMAGE_NAME }}:latest
 
     - name: docker push server
       if: github.event_name != 'pull_request'
