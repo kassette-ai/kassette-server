@@ -1,16 +1,10 @@
 package backendconfig
 
 import (
-	"io"
 	. "kassette.ai/kassette-server/utils"
-	"log"
 )
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"reflect"
 	"time"
 )
 
@@ -28,32 +22,27 @@ type SourcesT struct {
 }
 
 func loadConfig() {
-	configBackendURL = ""
-	configBackendToken = ""
+
 	pollInterval = 5 * time.Second
 }
 
-func getBackendConfig() (SourcesT, bool) {
-	client := &http.Client{}
-	url := fmt.Sprintf("%s/workspace-config?workspaceToken=%s", configBackendURL, configBackendToken)
-	resp, err := client.Get(url)
+func getBackendConfig() (sources []SourcesT, destination []DestinationT) {
 
-	var respBody []byte
-	if resp != nil && resp.Body != nil {
-		respBody, _ = io.ReadAll(resp.Body)
-		defer resp.Body.Close()
-	}
-	if err != nil {
-		Logger.Error(fmt.Sprintf("Errored when sending request to the server", err))
-		return SourcesT{}, false
-	}
-	var sourcesJSON SourcesT
-	err = json.Unmarshal(respBody, &sourcesJSON)
-	if err != nil {
-		log.Println("Errored while parsing request", err, string(respBody), resp.StatusCode)
-		return SourcesT{}, false
-	}
-	return sourcesJSON, true
+	//if resp != nil && resp.Body != nil {
+	//	respBody, _ = io.ReadAll(resp.Body)
+	//	defer resp.Body.Close()
+	//}
+	//if err != nil {
+	//	Logger.Error(fmt.Sprint("Errored when sending request to the server", err))
+	//	return SourcesT{}, false
+	//}
+	//var sourcesJSON SourcesT
+	//err = json.Unmarshal(respBody, &sourcesJSON)
+	//if err != nil {
+	//	log.Println("Errored while parsing request", err, string(respBody), resp.StatusCode)
+	//	return SourcesT{}, false
+	//}
+	return
 }
 
 func init() {
@@ -62,18 +51,12 @@ func init() {
 }
 
 func pollConfigUpdate() {
-	for {
-		sourceJSON, ok := getBackendConfig()
-		if !ok {
-			log.Println("Errored when getting config to the server")
-		}
-		if ok && !reflect.DeepEqual(curSourceJSON, sourceJSON) {
-			curSourceJSON = sourceJSON
-			initialized = true
-			Eb.Publish("backendconfig", sourceJSON)
-		}
-		time.Sleep(time.Duration(pollInterval))
-	}
+	//for {
+	//	sourceJSON, ok := getBackendConfig()
+	//
+	//
+	//	time.Sleep(time.Duration(pollInterval))
+	//}
 }
 
 func GetConfig() SourcesT {
