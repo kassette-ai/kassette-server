@@ -118,29 +118,11 @@ func main() {
 		case <-ticker.C:
 			// Query the database for new records
 			
-			query := fmt.Sprintf("SELECT 
-						id_,
-						parent_act_inst_id_,
-						proc_def_key_,
-						proc_def_id_,
-						root_proc_inst_id_,
-						proc_inst_id_,
-						execution_id_,
-						act_id_,
-						task_id_,
-						call_proc_inst_id_,
-						call_case_inst_id_,
-						act_name_,
-						act_type_,
-						assignee_,
-						start_time_,
-						end_time_,
-						duration_,
-						act_inst_state_,
-						sequence_counter_,
-						tenant_id_,
-						removal_time_ 
-					FROM %s WHERE %s > $1", tableName, timestampCol)
+			query := fmt.Sprintf("SELECT id_,parent_act_inst_id_,proc_def_key_,proc_def_id_,root_proc_inst_id_," +
+						"proc_inst_id_,execution_id_,act_id_,task_id_,call_proc_inst_id_,call_case_inst_id_," +
+						"act_name_,act_type_,assignee_,start_time_,end_time_,duration_," +
+						"act_inst_state_,sequence_counter_,tenant_id_,removal_time_ " +
+					"FROM %s WHERE %s > $1", tableName, timestampCol)
 			rows, err := db.QueryContext(context.Background(), query, lastTimestamp)
 			if err != nil {
 				log.Fatal(fmt.Sprintf("Error querying database: %v\n", err))
