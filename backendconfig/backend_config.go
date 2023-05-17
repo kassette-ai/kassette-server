@@ -62,7 +62,7 @@ func GetConfig() SourcesT {
 	return curSourceJSON
 }
 
-func Subscribe(channel chan DataEvent) {
+func Subscribe(channel chan utils.DataEvent) {
 	Eb.Subscribe("backendconfig", channel)
 	Eb.PublishToChannel(channel, "backendconfig", curSourceJSON)
 }
@@ -79,6 +79,6 @@ func WaitForConfig() {
 
 // Setup backend config
 func Setup() {
-	Eb = new(EventBus)
+	Eb = new(utils.EventBus)
 	go pollConfigUpdate()
 }
