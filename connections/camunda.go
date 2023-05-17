@@ -16,27 +16,27 @@ import (
 
 // table act_hi_actinst
 type ActivitiInstance struct {
-	Id_                 string    `json:"id_"`
-	Parent_act_inst_id_ string    `json:"parent_act_inst_id_"`
-	Proc_def_key_       string    `json:"proc_def_key_"`
-	Proc_def_id_        string    `json:"proc_def_id_"`
-	Root_proc_inst_id_  string    `json:"root_proc_inst_id_"`
-	Proc_inst_id_       string    `json:"proc_inst_id_"`
-	Execution_id_       string    `json:"execution_id_"`
-	Act_id_             string    `json:"act_id_"`
-	Task_id_            string    `json:"task_id_"`
-	Call_proc_inst_id_  string    `json:"call_proc_inst_id_"`
-	Call_case_inst_id_  string    `json:"call_case_inst_id_"`
-	Act_name_           string    `json:"act_name_"`
-	Act_type_           string    `json:"act_type_"`
-	Assignee_           string    `json:"assignee_"`
-	Start_time_         time.Time `json:"start_time_"`
-	End_time_           time.Time `json:"end_time_"`
-	Duration_           int       `json:"duration_"`
-	Act_inst_state_     int       `json:"act_inst_state_"`
-	Sequence_counter_   int       `json:"sequence_counter_"`
-	Tenant_id_          string    `json:"tenant_id_"`
-	Removal_time_       string    `json:"removal_time_"`
+	Id_                 sql.NullString `json:"id_"`
+	Parent_act_inst_id_ sql.NullString `json:"parent_act_inst_id_"`
+	Proc_def_key_       sql.NullString `json:"proc_def_key_"`
+	Proc_def_id_        sql.NullString `json:"proc_def_id_"`
+	Root_proc_inst_id_  sql.NullString `json:"root_proc_inst_id_"`
+	Proc_inst_id_       sql.NullString `json:"proc_inst_id_"`
+	Execution_id_       sql.NullString `json:"execution_id_"`
+	Act_id_             sql.NullString `json:"act_id_"`
+	Task_id_            sql.NullString `json:"task_id_"`
+	Call_proc_inst_id_  sql.NullString `json:"call_proc_inst_id_"`
+	Call_case_inst_id_  sql.NullString `json:"call_case_inst_id_"`
+	Act_name_           sql.NullString `json:"act_name_"`
+	Act_type_           sql.NullString `json:"act_type_"`
+	Assignee_           sql.NullString `json:"assignee_"`
+	Start_time_         sql.NullTime   `json:"start_time_"`
+	End_time_           sql.NullTime   `json:"end_time_"`
+	Duration_           sql.NullInt32  `json:"duration_"`
+	Act_inst_state_     sql.NullInt32  `json:"act_inst_state_"`
+	Sequence_counter_   sql.NullInt32  `json:"sequence_counter_"`
+	Tenant_id_          sql.NullString `json:"tenant_id_"`
+	Removal_time_       sql.NullString `json:"removal_time_"`
 }
 
 func GetConnectionString() string {
@@ -163,11 +163,11 @@ func main() {
 				}
 
 				// Start a worker for the new record
-				go startWorker(activitiInstance)
+				startWorker(activitiInstance)
 
 				// Update the last timestamp seen
-				if activitiInstance.Start_time_.After(lastTimestamp) {
-					lastTimestamp = activitiInstance.Start_time_
+				if activitiInstance.Start_time_.Time.After(lastTimestamp) {
+					lastTimestamp = activitiInstance.Start_time_.Time
 				}
 			}
 		}
