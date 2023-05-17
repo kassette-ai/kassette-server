@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/spf13/viper"
+	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"sort"
 	"strconv"
@@ -162,10 +163,10 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 
 	jd.dbHandle, err = sql.Open("postgres", psqlInfo)
 	if err != nil {
-		log.Fatal("Failed to open DB connection", err)
+		logger.Fatal(fmt.Sprintf("Failed to open DB connection", err))
 	}
 
-	log.Println("Connected to DB")
+	logger.Info("Connected to DB")
 	err = jd.dbHandle.Ping()
 
 	jd.setupEnumTypes(psqlInfo)
@@ -210,7 +211,7 @@ func (jd *HandleT) setupEnumTypes(psqlInfo string) {
 
 	_, err = dbHandle.Exec(sqlStatement)
 	if err != nil {
-		log.Fatal("Failed to setup enum types", err)
+		logger.Fatal(fmt.Sprintf("Failed to setup enum types", err))
 	}
 }
 
@@ -350,7 +351,7 @@ func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 		return
 	}
 	pqErr := err.(*pq.Error)
-	log.Fatal("Failed to store job", pqErr)
+	logger.Fatal(fmt.Sprintf("Failed to store job", pqErr))
 	return
 }
 
@@ -522,7 +523,7 @@ func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string,
 	for _, ds := range dsList {
 		jobs, err := jd.getProcessedJobsDS(ds, false, stateFilter, customValFilters, count, sourceIDFilters...)
 		if err != nil {
-			log.Printf("Error getting processed jobs from ds: %s", ds.JobTable)
+			logger.Error(fmt.Sprintf("Error getting processed jobs from ds: %s", ds.JobTable))
 			continue
 		}
 
@@ -758,7 +759,7 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 				err := jd.updateJobStatusDS(ds.ds, statusList[lastPos:i], customValFilters)
 				if err != nil {
 					//We have already marked this as empty
-					log.Fatal(err)
+					logger.Fatal(err.Error())
 				}
 
 				lastPos = i
@@ -771,7 +772,7 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 			err := jd.updateJobStatusDS(ds.ds, statusList[lastPos:i], customValFilters)
 			if err != nil {
 				//We have already marked this as empty
-				log.Fatal(err)
+				logger.Fatal(err.Error())
 			}
 
 			lastPos = i
@@ -786,7 +787,7 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 		//Update status in the last element
 		err := jd.updateJobStatusDS(dsList[len(dsList)-1], statusList[lastPos:], customValFilters)
 		if err != nil {
-			log.Println("Error updating job status", err)
+			logger.Error(fmt.Sprintf("Error updating job status", err))
 		}
 
 	}
@@ -812,7 +813,7 @@ func (jd *HandleT) getDSRangeList(refreshFromDB bool) []dataSetRangeT {
 		row := jd.dbHandle.QueryRow(sqlStatement)
 		err := row.Scan(&minID, &maxID)
 		if err != nil {
-			log.Fatal("Error getting min/max job_id", err)
+			logger.Fatal(fmt.Sprintf("Error getting min/max job_id", err))
 			continue
 		}
 
@@ -859,7 +860,7 @@ func (jd *HandleT) sortDnumList(dnumList []string) {
 			//Strictly ordered. Return
 			srcInt, err := strconv.Atoi(src[k])
 			if err != nil {
-				log.Fatal("Error converting to int", src[k])
+				logger.Fatal(fmt.Sprintf("Error converting to int", src[k]))
 			}
 
 			dstInt, err := strconv.Atoi(dst[k])

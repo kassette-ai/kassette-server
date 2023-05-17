@@ -1,17 +1,13 @@
 package backendconfig
 
 type SourceT struct {
-	ID                         string
-	Name                       string
-	SourceDefinition           SourceDefinitionT
-	Config                     map[string]interface{}
-	Enabled                    bool
-	WorkspaceID                string
-	Destinations               []DestinationT
-	WriteKey                   string
-	DgSourceTrackingPlanConfig DgSourceTrackingPlanConfigT
-	Transient                  bool
-	EventSchemasEnabled        bool
+	ID               string                 `json:"id"`
+	Name             string                 `json:"sourceName"`
+	SourceDefinition SourceDefinitionT      `json:"sourceDefinition"`
+	Config           map[string]interface{} `json:"config"`
+	Enabled          bool                   `json:"enabled"`
+	Destinations     []DestinationT         `json:"destinations"`
+	WriteKey         string                 `json:"writeKey"`
 }
 
 type DgSourceTrackingPlanConfigT struct {
@@ -29,9 +25,9 @@ type TrackingPlanT struct {
 }
 
 type SourceDefinitionT struct {
-	ID       string
-	Name     string
-	Category string
+	ID       string `json:"sourceId"`
+	Name     string `json:"sourceName"`
+	Category string `json:"category"`
 }
 
 type DestinationDefinitionT struct {

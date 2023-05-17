@@ -9,6 +9,7 @@ import (
 	"kassette.ai/kassette-server/processor"
 	"kassette.ai/kassette-server/router"
 	"kassette.ai/kassette-server/utils"
+	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"time"
 )
@@ -40,7 +41,7 @@ func main() {
 		return
 	}
 
-	utils.Logger.Info("Starting Kassette Server")
+	logger.Info("Starting Kassette Server")
 
 	// source environment variables
 	//setupPostgres()
@@ -56,8 +57,12 @@ func main() {
 	var processor processor.HandleT
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
 
+	var configDB backendconfig.HandleT
+	configDB.Setup()
+
 	var gateway gateway.HandleT
 	gateway.Setup(&gatewayDB)
+
 }
 
 func monitorDestRouters(routerDB, batchRouterDB *jobsdb.HandleT) {

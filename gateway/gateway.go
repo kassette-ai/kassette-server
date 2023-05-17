@@ -15,7 +15,7 @@ import (
 	"kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
-	. "kassette.ai/kassette-server/utils"
+	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"net/http"
 	"regexp"
@@ -120,7 +120,7 @@ func (gateway *HandleT) webRequestBatcher() {
 	for {
 		select {
 		case req := <-gateway.webRequestQ:
-			Logger.Info("Received web request")
+			logger.Fatal("Received web request")
 			//Append to request buffer
 			reqBuffer = append(reqBuffer, req)
 			if len(reqBuffer) == maxBatchSize {
@@ -160,7 +160,7 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
 }
 
 func (gateway *HandleT) startWebHandler() {
-	Logger.Info("Starting web handler")
+	logger.Info("Starting web handler")
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
@@ -200,7 +200,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {
-		Logger.Error("Error getting payload and write key")
+		logger.Error("Error getting payload and write key")
 		return
 	}
 	done := make(chan string, 1)
@@ -229,7 +229,7 @@ func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	writeKey := "camunda"
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
-		Logger.Error("Error getting payload from request with source: " + writeKey)
+		logger.Error("Error getting payload from request with source: " + writeKey)
 
 		return []byte{}, writeKey, err
 	}
@@ -244,7 +244,7 @@ func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
 	payload, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 	if err != nil {
-		Logger.Error(fmt.Sprint(
+		logger.Error(fmt.Sprint(
 			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
 			r.Header.Get("Content-Length"),
 			string(payload)),
@@ -297,7 +297,7 @@ func (gateway *HandleT) runUserWebRequestWorkers(ctx context.Context) {
 func (gateway *HandleT) initUserWebRequestWorkers() {
 	userWebRequestWorkers = make([]*userWebRequestWorkerT, maxUserWebRequestWorkerProcess)
 	for i := 0; i < maxUserWebRequestWorkerProcess; i++ {
-		Logger.Info(fmt.Sprint("User Web Request Worker Started", i))
+		logger.Info(fmt.Sprint("User Web Request Worker Started", i))
 		userWebRequestWorker := &userWebRequestWorkerT{
 			webRequestQ:   make(chan *webRequestT, maxUserWebRequestBatchSize),
 			batchRequestQ: make(chan *batchWebRequestT),
@@ -541,7 +541,7 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 	}
 	marshalledParams, err := json.Marshal(params)
 	if err != nil {
-		Logger.Error(fmt.Sprint("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
+		logger.Error(fmt.Sprint("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
 
 		marshalledParams = []byte(
 			`{"error": "rudder-server gateway failed to marshal params"}`,
@@ -646,7 +646,7 @@ func setRandomMessageIDWhenEmpty(event map[string]interface{}) {
 // The  writer of the batch request to the DB.
 // Listens on the channel and sends the done response back
 func (gateway *HandleT) webRequestBatchDBWriter(process int) {
-	Logger.Info(fmt.Sprint("Starting batch request DB writer, process:", process))
+	logger.Info(fmt.Sprint("Starting batch request DB writer, process:", process))
 	for breq := range gateway.batchRequestQ {
 		log.Println("Batch request received")
 		var jobList []*jobsdb.JobT
