@@ -1,10 +1,7 @@
 package backendconfig
 
 import (
-	. "kassette.ai/kassette-server/utils"
-)
-
-import (
+	"kassette.ai/kassette-server/utils"
 	"time"
 )
 
@@ -15,7 +12,9 @@ var (
 	initialized                          bool
 )
 
-var Eb *EventBus
+var (
+	Eb *utils.EventBus
+)
 
 type SourcesT struct {
 	Sources []SourceT `json:"sources"`
