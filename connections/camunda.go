@@ -50,7 +50,7 @@ func GetConnectionString() string {
 		viper.GetString("database.ssl_mode"))
 }
 
-func submitPayload(jsonData) {
+func submitPayload(jsonData []byte) {
 	url := viper.GetString("kassette-server.url")
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -83,6 +83,7 @@ func startWorker(activitiInstance ActivitiInstance) {
 		return
 	}
 	log.Printf("Json object: %s", string(jsonData))
+	submitPayload(jsonData)
 }
 
 func main() {
