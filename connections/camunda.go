@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"encoding/json"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
@@ -13,27 +14,27 @@ import (
 
 // table act_hi_actinst
 type ActivitiInstance struct {
-	Id_                 string `json:"id_"`
-	Parent_act_inst_id_ string `json:"parent_act_inst_id_"`
-	Proc_def_key_       string `json:"proc_def_key_"`
-	Proc_def_id_        string `json:"proc_def_id_"`
-	Root_proc_inst_id_  string `json:"root_proc_inst_id_"`
-	Proc_inst_id_       string `json:"proc_inst_id_"`
-	Execution_id_       string `json:"execution_id_"`
-	Act_id_             string `json:"act_id_"`
-	Task_id_            string `json:"task_id_"`
-	Call_proc_inst_id_  string `json:"call_proc_inst_id_"`
-	Call_case_inst_id_  string `json:"call_case_inst_id_"`
-	Act_name_           string `json:"act_name_"`
-	Act_type_           string `json:"act_type_"`
-	Assignee_           string `json:"assignee_"`
-	Start_time_         string `json:"start_time_"`
-	End_time_           string `json:"end_time_"`
-	Duration_           int    `json:"duration_"`
-	Act_inst_state_     int    `json:"act_inst_state_"`
-	Sequence_counter_   int    `json:"sequence_counter_"`
-	Tenant_id_          string `json:"tenant_id_"`
-	Removal_time_       string `json:"removal_time_"`
+	Id_                 string    `json:"id_"`
+	Parent_act_inst_id_ string    `json:"parent_act_inst_id_"`
+	Proc_def_key_       string    `json:"proc_def_key_"`
+	Proc_def_id_        string    `json:"proc_def_id_"`
+	Root_proc_inst_id_  string    `json:"root_proc_inst_id_"`
+	Proc_inst_id_       string    `json:"proc_inst_id_"`
+	Execution_id_       string    `json:"execution_id_"`
+	Act_id_             string    `json:"act_id_"`
+	Task_id_            string    `json:"task_id_"`
+	Call_proc_inst_id_  string    `json:"call_proc_inst_id_"`
+	Call_case_inst_id_  string    `json:"call_case_inst_id_"`
+	Act_name_           string    `json:"act_name_"`
+	Act_type_           string    `json:"act_type_"`
+	Assignee_           string    `json:"assignee_"`
+	Start_time_         time.Time `json:"start_time_"`
+	End_time_           time.Time `json:"end_time_"`
+	Duration_           int       `json:"duration_"`
+	Act_inst_state_     int       `json:"act_inst_state_"`
+	Sequence_counter_   int       `json:"sequence_counter_"`
+	Tenant_id_          string    `json:"tenant_id_"`
+	Removal_time_       string    `json:"removal_time_"`
 }
 
 func GetConnectionString() string {
@@ -47,8 +48,39 @@ func GetConnectionString() string {
 		viper.GetString("database.ssl_mode"))
 }
 
-func startWorker(id string, name string, createdAt time.Time) {
-	log.Fatal(fmt.Sprint("fetched record %s, with name %s at %s", id, name, createdAt)) // Do work here
+func submitPayload(jsonData) {
+	url := viper.GetString("kassette-server.url")
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Fatal("Error creating request:", err)
+		return
+  	}
+  	req.Header.Set("Content-Type", "application/json")
+  	// Send the request
+  	client := &http.Client{}
+  	resp, err := client.Do(req)
+  	if err != nil {
+		log.Fatal("Error sending request:", err)
+		return
+	}
+	defer resp.Body.Close()
+	// Check the response status code
+	if resp.StatusCode != http.StatusOK {
+		log.Fatal("Request failed with status:", resp.StatusCode)
+		return
+	}
+	log.Printf("Request successful!\n")
+}
+
+func startWorker(activitiInstance ActivitiInstance) {
+	// Do work here
+	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Act_id_, activitiInstance.Act_name_, activitiInstance.Start_time_)
+	jsonData, err := json.Marshal(activitiInstance)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+    log.Printf("Json object: %s", string(jsonData))
 }
 
 func main() {
@@ -85,7 +117,30 @@ func main() {
 		select {
 		case <-ticker.C:
 			// Query the database for new records
-			query := fmt.Sprintf("SELECT id_, act_name_, start_time_ FROM %s WHERE %s > $1", tableName, timestampCol)
+			
+			query := fmt.Sprintf("SELECT 
+						id_,
+						parent_act_inst_id_,
+						proc_def_key_,
+						proc_def_id_,
+						root_proc_inst_id_,
+						proc_inst_id_,
+						execution_id_,
+						act_id_,
+						task_id_,
+						call_proc_inst_id_,
+						call_case_inst_id_,
+						act_name_,
+						act_type_,
+						assignee_,
+						start_time_,
+						end_time_,
+						duration_,
+						act_inst_state_,
+						sequence_counter_,
+						tenant_id_,
+						removal_time_ 
+					FROM %s WHERE %s > $1", tableName, timestampCol)
 			rows, err := db.QueryContext(context.Background(), query, lastTimestamp)
 			if err != nil {
 				log.Fatal(fmt.Sprintf("Error querying database: %v\n", err))
@@ -96,19 +151,39 @@ func main() {
 			// Process the new records
 			for rows.Next() {
 				var activitiInstance ActivitiInstance
-				var createdAt time.Time
-				err := rows.Scan(&activitiInstance.Id_, &activitiInstance.Act_name_, &createdAt)
+				err := rows.Scan(	&activitiInstance.Id_,
+									&activitiInstance.Parent_act_inst_id_,
+									&activitiInstance.Proc_def_key_,
+									&activitiInstance.Proc_def_id_,
+									&activitiInstance.Root_proc_inst_id_,
+									&activitiInstance.Proc_inst_id_,
+									&activitiInstance.Execution_id_,
+									&activitiInstance.Act_id_,
+									&activitiInstance.Task_id_,
+									&activitiInstance.Call_proc_inst_id_,
+									&activitiInstance.Call_case_inst_id_,
+									&activitiInstance.Act_name_,
+									&activitiInstance.Act_type_,
+									&activitiInstance.Assignee_,
+									&activitiInstance.Start_time_,
+									&activitiInstance.End_time_,
+									&activitiInstance.Duration_,
+									&activitiInstance.Act_inst_state_,
+									&activitiInstance.Sequence_counter_,
+									&activitiInstance.Tenant_id_,
+									&activitiInstance.Removal_time_
+								)
 				if err != nil {
 					log.Fatal(fmt.Sprintf("Error reading row: %v\n", err))
 					continue
 				}
 
 				// Start a worker for the new record
-				go startWorker(activitiInstance.Id_, activitiInstance.Act_name_, createdAt)
+				go startWorker(activitiInstance)
 
 				// Update the last timestamp seen
-				if createdAt.After(lastTimestamp) {
-					lastTimestamp = createdAt
+				if activitiInstance.Start_time_.After(lastTimestamp) {
+					lastTimestamp = activitiInstance.Start_time_
 				}
 			}
 		}
