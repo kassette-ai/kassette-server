@@ -8,5 +8,7 @@ database:
   ssl_mode: disable
 kassette-server:
   url: http://localhost:8080
+kassette-agent:
+  uid: camunda
 
 
