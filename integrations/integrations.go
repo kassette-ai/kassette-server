@@ -41,7 +41,7 @@ func GetPostInfo(transformRaw json.RawMessage) PostParameterT {
 
 func GetDestinationIDs(clientEvent interface{}, destNameIDMap map[string]backendconfig.DestinationDefinitionT) (retVal []string) {
 	clientIntgs, ok := misc.GetKassetteEventVal("integrations", clientEvent)
-	if !ok {
+	if clientIntgs == nil || !ok {
 		return
 	}
 

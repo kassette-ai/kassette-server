@@ -11,6 +11,7 @@ import (
 	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
+	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"reflect"
@@ -67,6 +68,7 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 	proc.userJobPQ = make(pqT, 0)
 
 	go proc.mainLoop()
+	go backendConfigSubscriber()
 	if processSessions {
 		logger.Info("Starting session processor")
 		go proc.createSessions()
@@ -365,6 +367,23 @@ func getEnabledDestinationTypes(writeKey string) map[string]backendconfig.Destin
 		}
 	}
 	return enabledDestinationTypes
+}
+
+func backendConfigSubscriber() {
+	ch := make(chan utils.DataEvent)
+	backendconfig.Subscribe(ch)
+	for {
+		config := <-ch
+		configSubscriberLock.Lock()
+		writeKeyDestinationMap = make(map[string][]backendconfig.DestinationT)
+		sources := config.Data.(backendconfig.SourcesT)
+		for _, source := range sources.Sources {
+			if source.Enabled {
+				writeKeyDestinationMap[source.WriteKey] = source.Destinations
+			}
+		}
+		configSubscriberLock.Unlock()
+	}
 }
 
 func getEnabledDestinations(writeKey string, destinationName string) []backendconfig.DestinationT {

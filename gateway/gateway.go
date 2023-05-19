@@ -120,7 +120,7 @@ func (gateway *HandleT) webRequestBatcher() {
 	for {
 		select {
 		case req := <-gateway.webRequestQ:
-			logger.Fatal("Received web request")
+			logger.Info("Received web request")
 			//Append to request buffer
 			reqBuffer = append(reqBuffer, req)
 			if len(reqBuffer) == maxBatchSize {
@@ -502,13 +502,13 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 		//}
 
 		// hashing combination of userIDFromReq + anonIDFromReq, using colon as a delimiter
-		var rudderId uuid.UUID
-		rudderId, err = misc.GetMD5UUID(userIDFromReq + ":" + anonIDFromReq)
+		var kassetteId uuid.UUID
+		kassetteId, err = misc.GetMD5UUID(userIDFromReq + ":" + anonIDFromReq)
 		if err != nil {
 			err = errors.New(response.NonIdentifiableRequest)
 			return
 		}
-		toSet["rudderId"] = rudderId
+		toSet["kassetteId"] = kassetteId
 		setRandomMessageIDWhenEmpty(toSet)
 		if eventTypeFromReq == "audiencelist" {
 			containsAudienceList = true
@@ -544,7 +544,7 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 		logger.Error(fmt.Sprint("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
 
 		marshalledParams = []byte(
-			`{"error": "rudder-server gateway failed to marshal params"}`,
+			`{"error": "kassette-server gateway failed to marshal params"}`,
 		)
 	}
 	err = nil

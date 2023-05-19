@@ -96,7 +96,7 @@ func GetMD5UUID(str string) (uuid.UUID, error) {
 	return uuid.FromBytes(md5Sum[:])
 }
 
-// ParseRudderEventBatch looks for the batch structure inside event
+// ParseKassetteEventBatch looks for the batch structure inside event
 func ParseKassetteEventBatch(eventPayload json.RawMessage) ([]interface{}, bool) {
 	var eventListJSON map[string]interface{}
 	err := json.Unmarshal(eventPayload, &eventListJSON)
@@ -114,18 +114,18 @@ func ParseKassetteEventBatch(eventPayload json.RawMessage) ([]interface{}, bool)
 	return eventListJSONBatchType, true
 }
 
-// GetRudderEventVal returns the value corresponding to the key in the message structure
+// returns the value corresponding to the key in the message structure
 func GetKassetteEventVal(key string, kassetteEvent interface{}) (interface{}, bool) {
 
-	rudderEventMap, ok := GetKassetteEventMap(kassetteEvent)
+	kassetteEventMap, ok := GetKassetteEventMap(kassetteEvent)
 	if !ok {
 		return nil, false
 	}
-	rudderVal, ok := rudderEventMap[key]
+	kassetteVal, ok := kassetteEventMap[key]
 	if !ok {
 		return nil, false
 	}
-	return rudderVal, true
+	return kassetteVal, true
 }
 
 // Contains returns true if an element is present in a iteratee.
@@ -185,7 +185,7 @@ func GetKassetteEventUserID(eventList []interface{}) (string, bool) {
 	return userIDStr, true
 }
 
-// GetRudderEventMap returns the event structure from the client payload
+// GetKassetteEventMap returns the event structure from the client payload
 func GetKassetteEventMap(kassetteEvent interface{}) (map[string]interface{}, bool) {
 
 	kassetteEventMap, ok := kassetteEvent.(map[string]interface{})

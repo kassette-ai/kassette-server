@@ -71,7 +71,7 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 		req.Header.Add(key, val.(string))
 	}
 
-	req.Header.Add("User-Agent", "RudderLabs")
+	req.Header.Add("User-Agent", "Kassette")
 
 	resp, err := client.Do(req)
 

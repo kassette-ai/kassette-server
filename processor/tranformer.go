@@ -95,9 +95,9 @@ type transformerHandleT struct {
 	responseQ  chan *transformMessageT
 	accessLock sync.Mutex
 	//perfStats    *misc.PerfStats
-	//sentStat     *stats.RudderStats
-	//receivedStat *stats.RudderStats
-	//failedStat   *stats.RudderStats
+	//sentStat     *stats.KassetteStats
+	//receivedStat *stats.KassetteStats
+	//failedStat   *stats.KassetteStats
 }
 
 type transformMessageT struct {

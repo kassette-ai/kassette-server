@@ -51,14 +51,14 @@ func main() {
 	var routerDB jobsdb.HandleT
 	var batchRouterDB jobsdb.HandleT
 
+	var configDB backendconfig.HandleT
+	configDB.Init()
+
 	routerDB.Setup(false, "rt", routerDBRetention, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false)
 
 	var processor processor.HandleT
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
-
-	var configDB backendconfig.HandleT
-	configDB.Setup()
 
 	var gateway gateway.HandleT
 	gateway.Setup(&gatewayDB)

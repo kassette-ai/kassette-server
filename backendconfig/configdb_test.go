@@ -41,7 +41,8 @@ var (
 func shutdown() {
 
 	logger.Info("Cleaning all data from source_config table")
-	cb.dbHandle.Exec("DELETE FROM source_config")
+	//cb.dbHandle.Exec("DELETE FROM source_config")
+	cb.dbHandle.Close()
 
 }
 
@@ -69,12 +70,14 @@ func TestSourceSave(t *testing.T) {
 			Name:     "Camunda",
 			Category: "Workflow",
 		},
-		Config:  map[string]interface{}{},
-		Enabled: true,
+		WriteKey: "write_key",
+		Config:   map[string]interface{}{},
+		Enabled:  true,
 		Destinations: []DestinationT{
 			{
-				ID:   "1",
-				Name: "Camunda-test",
+				ID:      "1",
+				Name:    "Camunda-test",
+				Enabled: true,
 				DestinationDefinition: DestinationDefinitionT{
 					ID:            "1",
 					Name:          "power_bi",

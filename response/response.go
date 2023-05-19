@@ -50,7 +50,8 @@ const (
 	ErrorInParseForm = "Error during parsing form"
 	// ErrorInParseMultiform - Error during parsing multiform
 	ErrorInParseMultiform = "Error during parsing multiform"
-	// NotKassetteEvent = Event is not a Valid Rudder Event
+	// NotKassetteEvent = Event is not a Valid Kassette Event
+	// NotKassetteEvent = Event is not a Valid Kassette Event
 	NotKassetteEvent = "Event is not a valid kassette event"
 	// ContextDeadlineExceeded - context deadline exceeded
 	ContextDeadlineExceeded = "context deadline exceeded"

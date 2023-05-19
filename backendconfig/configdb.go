@@ -8,6 +8,7 @@ import (
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 	"log"
+	"reflect"
 	"time"
 )
 
@@ -36,7 +37,18 @@ func init() {
 
 func (cd *HandleT) pollConfigUpdate() {
 	for {
-		ok := cd.getAllConfiguredSources()
+		sourceJSON, ok := cd.getAllConfiguredSources()
+
+		if ok && !reflect.DeepEqual(curSourceJSON, sourceJSON) {
+			curSourceJSON = sourceJSON
+			initialized = true
+			Eb.Publish("backendconfig", sourceJSON)
+		}
+		time.Sleep(time.Duration(pollInterval))
+	}
+
+	for {
+		_, ok := cd.getAllConfiguredSources()
 		if !ok {
 			logger.Logger.Error("Failed to read source_config table")
 		}
@@ -64,8 +76,9 @@ func WaitForConfig() {
 }
 
 // Setup backend config
-func (cd *HandleT) init() {
+func (cd *HandleT) Init() {
 	Eb = new(utils.EventBus)
+	logger.Info("Initializing backend config")
 
 	cd.Setup()
 	initialized = true
@@ -104,8 +117,9 @@ func (cd *HandleT) Setup() {
 	cd.createConfigTable()
 }
 
-func (cd *HandleT) getAllConfiguredSources() (ok bool) {
-	sqlStatement := fmt.Sprintf(`SELECT * FROM source_config`)
+func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
+	logger.Info("Reading configuration table")
+	sqlStatement := fmt.Sprintf(`SELECT id, source, write_key FROM source_config`)
 	result, _ := cd.dbHandle.Prepare(sqlStatement)
 
 	defer result.Close()
@@ -114,7 +128,7 @@ func (cd *HandleT) getAllConfiguredSources() (ok bool) {
 
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("Failed to read source_config table: %s", err.Error()))
-		return false
+		return
 	}
 	defer rows.Close()
 
@@ -122,14 +136,20 @@ func (cd *HandleT) getAllConfiguredSources() (ok bool) {
 
 	for rows.Next() {
 		var id int
+		var sourceString string
 		var source SourceT
 		var writeKey string
 
-		_ = rows.Scan(&id, &source, &writeKey)
+		err = rows.Scan(&id, &sourceString, &writeKey)
+
+		json.Unmarshal([]byte(sourceString), &source)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to read source_config table: %s", err.Error()))
+		}
 		sourceConfig.Sources = append(sourceConfig.Sources, source)
 	}
 
-	return true
+	return sourceConfig, true
 }
 
 func (cd *HandleT) createConfigTable() {
