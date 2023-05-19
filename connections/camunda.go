@@ -52,12 +52,15 @@ func GetConnectionString() string {
 
 func submitPayload(jsonData []byte) {
 	url := viper.GetString("kassette-server.url")
+	uid := viper.GetString("kassette-agent.uid")
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		log.Fatal("Error creating request:", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("write_key", uid)
 	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -76,7 +79,7 @@ func submitPayload(jsonData []byte) {
 
 func startWorker(activitiInstance ActivitiInstance) {
 	// Do work here
-	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Act_id_, activitiInstance.Act_name_, activitiInstance.Start_time_)
+	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Act_id_.String, activitiInstance.Act_name_.String, activitiInstance.Start_time_.Time.String())
 	jsonData, err := json.Marshal(activitiInstance)
 	if err != nil {
 		log.Fatal(err)
