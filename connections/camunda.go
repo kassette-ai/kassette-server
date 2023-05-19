@@ -60,7 +60,7 @@ func submitPayload(jsonData []byte) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.SetBasicAuth(uid, "")
+	req.Header.Set("write_key", uid)
 	// Send the request
 	client := &http.Client{}
 	resp, err := client.Do(req)
