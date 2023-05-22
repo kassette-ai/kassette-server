@@ -67,6 +67,8 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 	proc.userPQItemMap = make(map[string]*pqItemT)
 	proc.userJobPQ = make(pqT, 0)
 
+	proc.transformer.Setup()
+
 	go proc.mainLoop()
 	go backendConfigSubscriber()
 	if processSessions {
@@ -234,7 +236,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			continue
 		}
 
-		//Save the JSON in DB. This is what the rotuer uses
+		//Save the JSON in DB. This is what the router uses
 		for idx, destEvent := range destTransformEventList {
 			destEventJSON, err := json.Marshal(destEvent)
 			//Should be a valid JSON since its our transformation

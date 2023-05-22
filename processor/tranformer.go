@@ -2,9 +2,11 @@ package processor
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"kassette.ai/kassette-server/backendconfig"
+	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"sort"
 	"sync"
@@ -106,6 +108,21 @@ type transformMessageT struct {
 	url   string
 }
 
+func (trans *transformerHandleT) transformWorker() {
+
+	for job := range trans.requestQ {
+		//Call remote transformation
+		rawJSON, err := json.Marshal(job.data)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error marshalling data %v", err))
+			continue
+		}
+
+		// Just sending the response back to the channel
+		trans.responseQ <- &transformMessageT{data: rawJSON, index: job.index}
+	}
+}
+
 // Transform function is used to invoke transformer API
 // Transformer is not thread safe. So we need to create a new instance for each request
 func (trans *transformerHandleT) Transform(clientEvents []interface{},
@@ -185,7 +202,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 		if resp.data == nil {
 			continue
 		}
-		respArray, _ := resp.data.([]interface{})
+		respArray := resp.data
 
 		//Transform is one to many mapping so returned
 		//response for each is an array. We flatten it out
@@ -207,5 +224,15 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 		Events:       outClientEvents,
 		Success:      true,
 		SourceIDList: outClientEventsSourceIDs,
+	}
+}
+
+func (trans *transformerHandleT) Setup() {
+	trans.requestQ = make(chan *transformMessageT, 100)
+	trans.responseQ = make(chan *transformMessageT, 100)
+
+	for i := 0; i < 5; i++ {
+		logger.Info(fmt.Sprintf("Starting transformer worker", i))
+		go trans.transformWorker()
 	}
 }

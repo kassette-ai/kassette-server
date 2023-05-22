@@ -60,6 +60,8 @@ func main() {
 	var processor processor.HandleT
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
 
+	go monitorDestRouters(&routerDB, &batchRouterDB)
+
 	var gateway gateway.HandleT
 	gateway.Setup(&gatewayDB)
 

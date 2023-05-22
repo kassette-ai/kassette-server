@@ -118,7 +118,7 @@ func (cd *HandleT) Setup() {
 }
 
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
-	logger.Info("Reading configuration table")
+
 	sqlStatement := fmt.Sprintf(`SELECT id, source, write_key FROM source_config`)
 	result, _ := cd.dbHandle.Prepare(sqlStatement)
 
