@@ -206,7 +206,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 
 		//Transform is one to many mapping so returned
 		//response for each is an array. We flatten it out
-		for _, respElem := range respArray {
+		for _, respElem := range respArray.([]interface{}) {
 			respElemMap, castOk := respElem.(map[string]interface{})
 			if castOk {
 				if statusCode, ok := respElemMap["statusCode"]; ok && fmt.Sprintf("%v", statusCode) == "400" {
