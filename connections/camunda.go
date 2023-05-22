@@ -14,29 +14,20 @@ import (
 	"github.com/spf13/viper"
 )
 
-// table act_hi_actinst
 type ActivitiInstance struct {
-	Id_                 sql.NullString `json:"id_"`
-	Parent_act_inst_id_ sql.NullString `json:"parent_act_inst_id_"`
-	Proc_def_key_       sql.NullString `json:"proc_def_key_"`
-	Proc_def_id_        sql.NullString `json:"proc_def_id_"`
-	Root_proc_inst_id_  sql.NullString `json:"root_proc_inst_id_"`
-	Proc_inst_id_       sql.NullString `json:"proc_inst_id_"`
-	Execution_id_       sql.NullString `json:"execution_id_"`
-	Act_id_             sql.NullString `json:"act_id_"`
-	Task_id_            sql.NullString `json:"task_id_"`
-	Call_proc_inst_id_  sql.NullString `json:"call_proc_inst_id_"`
-	Call_case_inst_id_  sql.NullString `json:"call_case_inst_id_"`
-	Act_name_           sql.NullString `json:"act_name_"`
-	Act_type_           sql.NullString `json:"act_type_"`
-	Assignee_           sql.NullString `json:"assignee_"`
-	Start_time_         sql.NullTime   `json:"start_time_"`
-	End_time_           sql.NullTime   `json:"end_time_"`
-	Duration_           sql.NullInt32  `json:"duration_"`
-	Act_inst_state_     sql.NullInt32  `json:"act_inst_state_"`
-	Sequence_counter_   sql.NullInt32  `json:"sequence_counter_"`
-	Tenant_id_          sql.NullString `json:"tenant_id_"`
-	Removal_time_       sql.NullString `json:"removal_time_"`
+	Actinst_proc_inst_id_   sql.NullString `json:"actinst_proc_inst_id_"`
+	Actinst_act_name_       sql.NullString `json:"actinst_act_name_"`
+	Actinst_act_type_       sql.NullString `json:"actinst_act_type_"`
+	Actinst_proc_def_key_   sql.NullString `json:"actinst_proc_def_key_"`
+	Actinst_assignee_       sql.NullString `json:"actinst_assignee_"`
+	Actinst_start_time_     sql.NullTime   `json:"actinst_start_time_"`
+	Actinst_end_time_       sql.NullTime   `json:"actinst_end_time_"`
+	Actinst_duration        sql.NullInt32  `json:"actinst_duration_"`
+	Actinst_act_inst_state_ sql.NullString `json:"actinst_act_inst_state_"`
+	Procdef_name_           sql.NullString `json:"procdef_name_"`
+	Detail_type_            sql.NullString `json:"detail_type_"`
+	Detail_var_type_        sql.NullString `json:"detail_var_type_"`
+	Detail_name_            sql.NullString `json:"detail_name_"`
 }
 
 func GetConnectionString() string {
@@ -79,7 +70,7 @@ func submitPayload(jsonData []byte) {
 
 func startWorker(activitiInstance ActivitiInstance) {
 	// Do work here
-	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Act_id_.String, activitiInstance.Act_name_.String, activitiInstance.Start_time_.Time.String())
+	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Actinst_proc_inst_id_.String, activitiInstance.Actinst_act_name_.String, activitiInstance.Actinst_start_time_.Time.String())
 	jsonData, err := json.Marshal(activitiInstance)
 	if err != nil {
 		log.Fatal(err)
@@ -102,8 +93,8 @@ func main() {
 		return
 	}
 
-	tableName := "act_hi_actinst"
-	timestampCol := "start_time_"
+	// tableName := "act_hi_actinst"
+	// timestampCol := "start_time_"
 	psqlInfo := GetConnectionString()
 	var lastTimestamp time.Time
 
@@ -124,11 +115,32 @@ func main() {
 		case <-ticker.C:
 			// Query the database for new records
 
-			query := fmt.Sprintf("SELECT id_,parent_act_inst_id_,proc_def_key_,proc_def_id_,root_proc_inst_id_,"+
-				"proc_inst_id_,execution_id_,act_id_,task_id_,call_proc_inst_id_,call_case_inst_id_,"+
-				"act_name_,act_type_,assignee_,start_time_,end_time_,duration_,"+
-				"act_inst_state_,sequence_counter_,tenant_id_,removal_time_ "+
-				"FROM %s WHERE %s > $1", tableName, timestampCol)
+			// query := fmt.Sprintf("SELECT id_,parent_act_inst_id_,proc_def_key_,proc_def_id_,root_proc_inst_id_,"+
+			// 	"proc_inst_id_,execution_id_,act_id_,task_id_,call_proc_inst_id_,call_case_inst_id_,"+
+			// 	"act_name_,act_type_,assignee_,start_time_,end_time_,duration_,"+
+			// 	"act_inst_state_,sequence_counter_,tenant_id_,removal_time_ "+
+			// 	"FROM %s WHERE %s > $1", tableName, timestampCol)
+
+			query := fmt.Sprintf("select " +
+				"actinst.proc_inst_id_," +
+				"actinst.act_name_," +
+				"actinst.act_type_," +
+				"actinst.proc_def_key_," +
+				"actinst.assignee_," +
+				"actinst.start_time_," +
+				"actinst.end_time_," +
+				"actinst.duration_," +
+				"actinst.act_inst_state_," +
+				"procdef.name_," +
+				"detail.type_," +
+				"detail.var_type_," +
+				"detail.name_ " +
+				"from act_hi_actinst as actinst," +
+				"act_re_procdef as procdef," +
+				"act_hi_detail as detail " +
+				"where actinst.start_time_ > $1 " +
+				"and actinst.proc_def_key_=procdef.key_ and actinst.execution_id_=detail.act_inst_id_;")
+
 			rows, err := db.QueryContext(context.Background(), query, lastTimestamp)
 			if err != nil {
 				log.Fatal(fmt.Sprintf("Error querying database: %v\n", err))
@@ -139,27 +151,20 @@ func main() {
 			// Process the new records
 			for rows.Next() {
 				var activitiInstance ActivitiInstance
-				err := rows.Scan(&activitiInstance.Id_,
-					&activitiInstance.Parent_act_inst_id_,
-					&activitiInstance.Proc_def_key_,
-					&activitiInstance.Proc_def_id_,
-					&activitiInstance.Root_proc_inst_id_,
-					&activitiInstance.Proc_inst_id_,
-					&activitiInstance.Execution_id_,
-					&activitiInstance.Act_id_,
-					&activitiInstance.Task_id_,
-					&activitiInstance.Call_proc_inst_id_,
-					&activitiInstance.Call_case_inst_id_,
-					&activitiInstance.Act_name_,
-					&activitiInstance.Act_type_,
-					&activitiInstance.Assignee_,
-					&activitiInstance.Start_time_,
-					&activitiInstance.End_time_,
-					&activitiInstance.Duration_,
-					&activitiInstance.Act_inst_state_,
-					&activitiInstance.Sequence_counter_,
-					&activitiInstance.Tenant_id_,
-					&activitiInstance.Removal_time_)
+				err := rows.Scan(&activitiInstance.Actinst_proc_inst_id_,
+					&activitiInstance.Actinst_act_name_,
+					&activitiInstance.Actinst_act_type_,
+					&activitiInstance.Actinst_proc_def_key_,
+					&activitiInstance.Actinst_assignee_,
+					&activitiInstance.Actinst_start_time_,
+					&activitiInstance.Actinst_end_time_,
+					&activitiInstance.Actinst_duration,
+					&activitiInstance.Actinst_act_inst_state_,
+					&activitiInstance.Procdef_name_,
+					&activitiInstance.Detail_type_,
+					&activitiInstance.Detail_var_type_,
+					&activitiInstance.Detail_name_)
+
 				if err != nil {
 					log.Fatal(fmt.Sprintf("Error reading row: %v\n", err))
 					continue
@@ -169,8 +174,8 @@ func main() {
 				startWorker(activitiInstance)
 
 				// Update the last timestamp seen
-				if activitiInstance.Start_time_.Time.After(lastTimestamp) {
-					lastTimestamp = activitiInstance.Start_time_.Time
+				if activitiInstance.Actinst_start_time_.Time.After(lastTimestamp) {
+					lastTimestamp = activitiInstance.Actinst_start_time_.Time
 				}
 			}
 		}
