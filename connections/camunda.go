@@ -127,7 +127,7 @@ func main() {
 			// 	"FROM %s WHERE %s > $1", tableName, timestampCol)
 
 			query := fmt.Sprintf("select "+
-				"actinst.id_"+
+				"actinst.id_,"+
 				"actinst.proc_inst_id_,"+
 				"actinst.act_name_,"+
 				"actinst.act_type_,"+
