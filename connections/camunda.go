@@ -145,7 +145,7 @@ func main() {
 				"act_re_procdef as procdef,"+
 				"act_hi_detail as detail "+
 				"where actinst.start_time_ > $1 "+
-				"and actinst.id_ not in ($2)"+
+				"and actinst.id_ not in ($2) "+
 				"and actinst.proc_def_key_=procdef.key_ "+
 				"and actinst.execution_id_=detail.act_inst_id_ limit %s;", dbBatchSize)
 
