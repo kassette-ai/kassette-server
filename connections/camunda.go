@@ -147,7 +147,7 @@ func main() {
 				"where actinst.start_time_ > $1 "+
 				"and actinst.id_ not in ($2)"+
 				"and actinst.proc_def_key_=procdef.key_ "+
-				"and actinst.execution_id_=detail.act_inst_id_ count %s;", dbBatchSize)
+				"and actinst.execution_id_=detail.act_inst_id_ limit %s;", dbBatchSize)
 
 			rows, err := db.QueryContext(context.Background(), query, lastTimestamp, strings.Join(lastIngested, ", "))
 			if err != nil {
