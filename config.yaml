@@ -18,6 +18,23 @@ gateway:
   maxReqSizeInKB: 1000000
   maxWebReqQSize: 1
 
+router:
+  jobQueryBatchSize: 10
+  updateStatusBatchSize: 10
+  readSleep: 100
+  noOfWorkers: 4
+  noOfJobsPerChannel: 10
+  ser: 10
+  maxSleep: 100
+  minSleep: 10
+  maxStatusUpdateWait: 10
+  randomWorkerAssign: true
+  keepOrderOnFailure: false
+  useTestSink: false
+  maxFailedCountForJob: 3
+  testSinkURL: http://localhost:8080/testSink
+
+
 
 logLevel: INFO
 serverPort: 8088

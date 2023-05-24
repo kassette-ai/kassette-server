@@ -543,10 +543,10 @@ func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceID
 	//The order of lock is very important. The mainCheckLoop
 	//takes lock in this order so reversing this will cause
 	//deadlocks
-	//jd.dsMigrationLock.RLock()
-	//jd.dsListLock.RLock()
-	//defer jd.dsMigrationLock.RUnlock()
-	//defer jd.dsListLock.RUnlock()
+	jd.dsMigrationLock.RLock()
+	jd.dsListLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
+	defer jd.dsListLock.RUnlock()
 
 	dsList := jd.getDSList(false)
 	outJobs := make([]*JobT, 0)

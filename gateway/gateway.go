@@ -15,6 +15,7 @@ import (
 	"kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
+	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"net/http"
@@ -140,6 +141,23 @@ func (gateway *HandleT) webRequestBatcher() {
 	}
 }
 
+func backendConfigSubscriber() {
+	ch := make(chan utils.DataEvent)
+	backendconfig.Subscribe(ch)
+	for {
+		config := <-ch
+		configSubscriberLock.Lock()
+		enabledWriteKeysSourceMap = map[string]string{}
+		sources := config.Data.(backendconfig.SourcesT)
+		for _, source := range sources.Sources {
+			if source.Enabled {
+				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
+			}
+		}
+		configSubscriberLock.Unlock()
+	}
+}
+
 func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
 	loadConfig()
 	gateway.webRequestQ = make(chan *webRequestT)
@@ -155,6 +173,8 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
 	for i := 0; i < maxDBWriterProcess; i++ {
 		go gateway.webRequestBatchDBWriter(i)
 	}
+
+	go backendConfigSubscriber()
 
 	gateway.startWebHandler()
 }
@@ -692,7 +712,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			//Should be function of body
 			newJob := jobsdb.JobT{
 				UUID:         id,
-				Parameters:   []byte(fmt.Sprint(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
+				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
 				CreatedAt:    time.Now(),
 				ExpireAt:     time.Now(),
 				CustomVal:    CustomVal,

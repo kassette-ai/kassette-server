@@ -46,15 +46,6 @@ func (cd *HandleT) pollConfigUpdate() {
 		}
 		time.Sleep(time.Duration(pollInterval))
 	}
-
-	for {
-		_, ok := cd.getAllConfiguredSources()
-		if !ok {
-			logger.Logger.Error("Failed to read source_config table")
-		}
-
-		time.Sleep(time.Duration(pollInterval))
-	}
 }
 
 func GetConfig() SourcesT {
@@ -115,6 +106,7 @@ func (cd *HandleT) Setup() {
 	}
 
 	cd.createConfigTable()
+
 }
 
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {

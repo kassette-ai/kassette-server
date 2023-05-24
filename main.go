@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/backendconfig"
@@ -85,7 +86,7 @@ func monitorDestRouters(routerDB, batchRouterDB *jobsdb.HandleT) {
 
 						rt, ok := dstToRouter[destination.DestinationDefinition.Name]
 						if !ok {
-
+							logger.Info(fmt.Sprintf("Starting a new Destination", destination.DestinationDefinition.Name))
 							var router router.HandleT
 							router.Setup(routerDB, destination.DestinationDefinition.Name)
 							dstToRouter[destination.DestinationDefinition.Name] = &router

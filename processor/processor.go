@@ -46,9 +46,9 @@ type HandleT struct {
 }
 
 func loadConfig() {
-
 	processSessions = true
 	rawDataDestinations = []string{"S3"}
+	transformBatchSize = 10
 }
 
 // Setup initializes the module
@@ -84,9 +84,9 @@ func (proc *HandleT) mainLoop() {
 		toQuery := 10
 
 		retryList := proc.gatewayDB.GetToRetry([]string{gateway.CustomVal}, toQuery)
-		//
+
 		unprocessedList := proc.gatewayDB.GetUnprocessed([]string{gateway.CustomVal}, toQuery)
-		//
+
 		if len(unprocessedList)+len(retryList) == 0 {
 
 			time.Sleep(2)
@@ -228,16 +228,17 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		//Call transform for this destination. Returns
 		//the JSON we can send to the destination
 		url := integrations.GetDestinationURL(destID)
-		logger.Info(fmt.Sprint("Transform input size", len(destEventList)))
+		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
 		response := proc.transformer.Transform(destEventList, url, transformBatchSize)
 		destTransformEventList := response.Events
-		logger.Info(fmt.Sprint("Transform output size", len(destTransformEventList)))
+		logger.Info(fmt.Sprintf("Transform output size: %d", len(destTransformEventList)))
 		if !response.Success {
 			continue
 		}
 
 		//Save the JSON in DB. This is what the router uses
 		for idx, destEvent := range destTransformEventList {
+			//We need to create a job for each destination
 			destEventJSON, err := json.Marshal(destEvent)
 			//Should be a valid JSON since its our transformation
 			//but we handle anyway
@@ -250,7 +251,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			sourceID := response.SourceIDList[idx]
 			newJob := jobsdb.JobT{
 				UUID:         id,
-				Parameters:   []byte(fmt.Sprint(`{"source_id": "%v"}`, sourceID)),
+				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, sourceID)),
 				CreatedAt:    time.Now(),
 				ExpireAt:     time.Now(),
 				CustomVal:    destID,
@@ -268,7 +269,6 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 	proc.routerDB.Store(destJobs)
 	proc.gatewayDB.UpdateJobStatus(statusList, []string{gateway.CustomVal})
 	//XX: End of transaction
-
 }
 
 func getTimestampFromEvent(event map[string]interface{}, field string) time.Time {

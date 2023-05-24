@@ -2,12 +2,10 @@ package processor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/utils/logger"
-	"log"
 	"sort"
 	"sync"
 )
@@ -111,16 +109,31 @@ type transformMessageT struct {
 func (trans *transformerHandleT) transformWorker() {
 
 	for job := range trans.requestQ {
-		//Call remote transformation
-		rawJSON, err := json.Marshal(job.data)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Error marshalling data %v", err))
-			continue
-		}
 
-		// Just sending the response back to the channel
-		trans.responseQ <- &transformMessageT{data: rawJSON, index: job.index}
+		// Just sending the data back for now....
+		respArray := job.data.([]interface{})
+
+		for _, respElem := range respArray {
+			respElemMap := transformToPayload(respElem.(map[string]interface{}))
+			trans.responseQ <- &transformMessageT{data: respElemMap, index: job.index}
+		}
 	}
+
+}
+
+// transformToPayload function is used to transform the message to payload
+func transformToPayload(m map[string]interface{}) map[string]interface{} {
+
+	rawTransform := make(map[string]interface{})
+	rawTransform["payload"] = m["message"]
+	rawTransform["endpoint"] = "https://api.powerbi.com/beta/c4ae8b92-c69e-4f24-a16b-9a034ffa7e79/datasets/1c250cc6-b561-4ba2-bcbf-e0c19c7177ee/rows?experience=power-bi&key=yWZBciGHfQkbbTrv4joIJZ3NMFDPClJ0JpQXX4Hul0SbyjKS455l6a2zKhgRF7fLcgszB0enmkANATj%2B1FSFGw%3D%3D"
+	rawTransform["userId"] = "userId"
+	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
+	rawTransform["requestConfig"] = "config"
+
+	logger.Debug(fmt.Sprintf("Transformed payload: %v", rawTransform))
+
+	return rawTransform
 }
 
 // Transform function is used to invoke transformer API
@@ -148,6 +161,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	for {
 		//The channel is still live and the last batch has been sent
 		//Construct the next batch
+
 		if reqQ != nil && toSendData == nil {
 			if batchSize > 0 {
 				clientBatch := make([]interface{}, 0)
@@ -196,27 +210,15 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	})
 
 	outClientEvents := make([]interface{}, 0)
-	outClientEventsSourceIDs := []string{}
+	var outClientEventsSourceIDs []string
 
 	for idx, resp := range transformResponse {
 		if resp.data == nil {
 			continue
 		}
-		respArray := resp.data
 
-		//Transform is one to many mapping so returned
-		//response for each is an array. We flatten it out
-		for _, respElem := range respArray.([]interface{}) {
-			respElemMap, castOk := respElem.(map[string]interface{})
-			if castOk {
-				if statusCode, ok := respElemMap["statusCode"]; ok && fmt.Sprintf("%v", statusCode) == "400" {
-					log.Println("Transformer returned 400 for event: ", respElemMap["metadata"].(map[string]interface{})["source_id"].(string))
-					continue
-				}
-			}
-			outClientEvents = append(outClientEvents, respElem)
-			outClientEventsSourceIDs = append(outClientEventsSourceIDs, sourceIDList[idx])
-		}
+		outClientEvents = append(outClientEvents, resp.data)
+		outClientEventsSourceIDs = append(outClientEventsSourceIDs, sourceIDList[idx])
 
 	}
 

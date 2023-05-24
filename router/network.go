@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"kassette.ai/kassette-server/integrations"
 	"kassette.ai/kassette-server/misc"
 	"log"
@@ -18,22 +17,23 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 
 	//Parse the response to get parameters
 	postInfo := integrations.GetPostInfo(jsonData)
+	requestMethod := "POST"
 
-	requestConfig, ok := postInfo.RequestConfig.(map[string]interface{})
-	misc.Assert(ok)
-	requestMethod, ok := requestConfig["requestMethod"].(string)
-	misc.Assert(ok && (requestMethod == "POST" || requestMethod == "GET"))
-	requestFormat := requestConfig["requestFormat"].(string)
-	misc.Assert(ok)
+	//requestConfig, ok := postInfo.RequestConfig.(map[string]interface{})
+	//misc.Assert(ok)
+	//requestMethod, ok := requestConfig["requestMethod"].(string)
+	//misc.Assert(ok && (requestMethod == "POST" || requestMethod == "GET"))
+	//requestFormat := requestConfig["requestFormat"].(string)
+	//misc.Assert(ok)
 
-	switch requestFormat {
-	case "PARAMS":
-		postInfo.Type = integrations.PostDataKV
-	case "JSON":
-		postInfo.Type = integrations.PostDataJSON
-	default:
-		misc.Assert(false)
-	}
+	//switch requestFormat {
+	//case "PARAMS":
+	//	postInfo.Type = integrations.PostDataKV
+	//case "JSON":
+	postInfo.Type = integrations.PostDataJSON
+	//default:
+	//	misc.Assert(false)
+	//}
 
 	var req *http.Request
 	var err error
@@ -78,7 +78,7 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 	var respBody []byte
 
 	if resp != nil && resp.Body != nil {
-		respBody, _ = ioutil.ReadAll(resp.Body)
+		respBody, _ = io.ReadAll(resp.Body)
 		defer resp.Body.Close()
 	}
 

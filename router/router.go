@@ -2,6 +2,9 @@ package router
 
 import (
 	"fmt"
+	"github.com/spf13/viper"
+	"kassette.ai/kassette-server/utils/logger"
+
 	"hash/fnv"
 	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
@@ -30,6 +33,31 @@ type HandleT struct {
 	toClearFailJobIDMap   map[int][]string
 }
 
+var (
+	jobQueryBatchSize, updateStatusBatchSize, noOfWorkers, noOfJobsPerChannel, ser int
+	maxFailedCountForJob                                                           int
+	readSleep, minSleep, maxSleep, maxStatusUpdateWait                             time.Duration
+	randomWorkerAssign, useTestSink, keepOrderOnFailure                            bool
+	testSinkURL                                                                    string
+)
+
+func loadConfig() {
+	jobQueryBatchSize = viper.GetInt("router.jobQueryBatchSize")
+	updateStatusBatchSize = viper.GetInt("router.updateStatusBatchSize")
+	readSleep = viper.GetDuration("router.readSleepInMS") * time.Millisecond
+	noOfWorkers = viper.GetInt("router.noOfWorkers")
+	noOfJobsPerChannel = viper.GetInt("router.noOfJobsPerChannel")
+	ser = viper.GetInt("router.ser")
+	maxSleep = viper.GetDuration("router.maxSleepInS") * time.Second
+	minSleep = viper.GetDuration("router.minSleepInS") * time.Second
+	maxStatusUpdateWait = viper.GetDuration("router.maxStatusUpdateWaitInS") * time.Second
+	randomWorkerAssign = viper.GetBool("router.randomWorkerAssign")
+	keepOrderOnFailure = viper.GetBool("router.keepOrderOnFailure")
+	useTestSink = viper.GetBool("router.useTestSink")
+	maxFailedCountForJob = viper.GetInt("router.maxFailedCountForJob")
+	testSinkURL = viper.GetString("router.testSinkURL")
+}
+
 type NetHandleT struct {
 	httpClient *http.Client
 }
@@ -50,14 +78,6 @@ type jobResponseT struct {
 	userID string
 }
 
-var (
-	jobQueryBatchSize, updateStatusBatchSize, noOfWorkers, noOfJobsPerChannel, ser int
-	maxFailedCountForJob                                                           int
-	readSleep, minSleep, maxSleep, maxStatusUpdateWait                             time.Duration
-	randomWorkerAssign, useTestSink, keepOrderOnFailure                            bool
-	testSinkURL                                                                    string
-)
-
 func (rt *HandleT) Setup(jobsDB *jobsdb.HandleT, destID string) {
 
 	rt.jobsDB = jobsDB
@@ -69,6 +89,7 @@ func (rt *HandleT) Setup(jobsDB *jobsdb.HandleT, destID string) {
 	rt.isEnabled = true
 	rt.netHandle = &NetHandleT{}
 	rt.netHandle.Setup(destID)
+	loadConfig()
 
 	rt.initWorkers()
 	go rt.statusInsertLoop()
@@ -85,8 +106,8 @@ func (rt *HandleT) statusInsertLoop() {
 
 		select {
 		case jobStatus := <-rt.responseQ:
-			log.Printf("%v Router :: Got back status error %v and state %v for job %v", rt.destID, jobStatus.status.ErrorCode,
-				jobStatus.status.JobState, jobStatus.status.JobID)
+			logger.Error(fmt.Sprintf("%v Router :: Got back status error %v and state %v for job %v", rt.destID, jobStatus.status.ErrorCode,
+				jobStatus.status.JobState, jobStatus.status.JobID))
 			responseList = append(responseList, jobStatus)
 
 		case <-time.After(maxStatusUpdateWait):
@@ -163,9 +184,9 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 	for {
 		job := <-worker.channel
 		var respStatusCode, attempts int
-		var respStatus, respBody string
+		var respStatus string
 
-		log.Println("Router :: trying to send payload to GA", respBody)
+		logger.Info(fmt.Sprintf("Router :: trying to send payload %s to %s", job.EventPayload, rt.destID))
 
 		postInfo := integrations.GetPostInfo(job.EventPayload)
 		userID := postInfo.UserID
@@ -214,9 +235,9 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 
 		//We can execute thoe job
 		for attempts = 0; attempts < ser; attempts++ {
-			log.Println("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser)
+			logger.Info(fmt.Sprintf("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser))
 
-			respStatusCode, respStatus, respBody = rt.netHandle.sendPost(job.EventPayload)
+			respStatusCode, respStatus, _ = rt.netHandle.sendPost(job.EventPayload)
 
 			if useTestSink {
 				//Internal test. No reason to sleep
@@ -419,6 +440,7 @@ func (rt *HandleT) generatorLoop() {
 
 		//Send the jobs to the jobQ
 		for _, wrkJob := range toProcess {
+
 			wrkJob.worker.channel <- wrkJob.job
 		}
 
