@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -15,6 +16,7 @@ import (
 )
 
 type ActivitiInstance struct {
+	Actinst_id_             sql.NullString `json:"actinst_id_"`
 	Actinst_proc_inst_id_   sql.NullString `json:"actinst_proc_inst_id_"`
 	Actinst_act_name_       sql.NullString `json:"actinst_act_name_"`
 	Actinst_act_type_       sql.NullString `json:"actinst_act_type_"`
@@ -97,6 +99,9 @@ func main() {
 	// timestampCol := "start_time_"
 	psqlInfo := GetConnectionString()
 	var lastTimestamp time.Time
+	lastIngested := make([]string, 0)
+
+	dbBatchSize := viper.GetString("database.batch_size")
 
 	log.Printf("Connecting to Database: %s\n", psqlInfo)
 
@@ -121,27 +126,30 @@ func main() {
 			// 	"act_inst_state_,sequence_counter_,tenant_id_,removal_time_ "+
 			// 	"FROM %s WHERE %s > $1", tableName, timestampCol)
 
-			query := fmt.Sprintf("select " +
-				"actinst.proc_inst_id_," +
-				"actinst.act_name_," +
-				"actinst.act_type_," +
-				"actinst.proc_def_key_," +
-				"actinst.assignee_," +
-				"actinst.start_time_," +
-				"actinst.end_time_," +
-				"actinst.duration_," +
-				"actinst.act_inst_state_," +
-				"procdef.name_," +
-				"detail.type_," +
-				"detail.var_type_," +
-				"detail.name_ " +
-				"from act_hi_actinst as actinst," +
-				"act_re_procdef as procdef," +
-				"act_hi_detail as detail " +
-				"where actinst.start_time_ > $1 " +
-				"and actinst.proc_def_key_=procdef.key_ and actinst.execution_id_=detail.act_inst_id_;")
+			query := fmt.Sprintf("select "+
+				"actinst.id_,"+
+				"actinst.proc_inst_id_,"+
+				"actinst.act_name_,"+
+				"actinst.act_type_,"+
+				"actinst.proc_def_key_,"+
+				"actinst.assignee_,"+
+				"actinst.start_time_,"+
+				"actinst.end_time_,"+
+				"actinst.duration_,"+
+				"actinst.act_inst_state_,"+
+				"procdef.name_,"+
+				"detail.type_,"+
+				"detail.var_type_,"+
+				"detail.name_ "+
+				"from act_hi_actinst as actinst,"+
+				"act_re_procdef as procdef,"+
+				"act_hi_detail as detail "+
+				"where actinst.start_time_ > $1 "+
+				"and actinst.id_ not in ($2) "+
+				"and actinst.proc_def_key_=procdef.key_ "+
+				"and actinst.execution_id_=detail.act_inst_id_ limit %s;", dbBatchSize)
 
-			rows, err := db.QueryContext(context.Background(), query, lastTimestamp)
+			rows, err := db.QueryContext(context.Background(), query, lastTimestamp, strings.Join(lastIngested, ", "))
 			if err != nil {
 				log.Fatal(fmt.Sprintf("Error querying database: %v\n", err))
 				continue
@@ -151,7 +159,8 @@ func main() {
 			// Process the new records
 			for rows.Next() {
 				var activitiInstance ActivitiInstance
-				err := rows.Scan(&activitiInstance.Actinst_proc_inst_id_,
+				err := rows.Scan(&activitiInstance.Actinst_id_,
+					&activitiInstance.Actinst_proc_inst_id_,
 					&activitiInstance.Actinst_act_name_,
 					&activitiInstance.Actinst_act_type_,
 					&activitiInstance.Actinst_proc_def_key_,
@@ -176,6 +185,9 @@ func main() {
 				// Update the last timestamp seen
 				if activitiInstance.Actinst_start_time_.Time.After(lastTimestamp) {
 					lastTimestamp = activitiInstance.Actinst_start_time_.Time
+					lastIngested = nil
+				} else {
+					lastIngested = append(lastIngested, activitiInstance.Actinst_id_.String)
 				}
 			}
 		}

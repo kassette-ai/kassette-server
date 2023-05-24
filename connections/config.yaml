@@ -6,6 +6,7 @@ database:
   password: password
   port: 5432
   ssl_mode: disable
+  batch_size: 100
 kassette-server:
   url: http://localhost:8080
 kassette-agent:
