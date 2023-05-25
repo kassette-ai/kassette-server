@@ -57,6 +57,11 @@ func Subscribe(channel chan utils.DataEvent) {
 	Eb.PublishToChannel(channel, "backendconfig", curSourceJSON)
 }
 
+func Update(channel chan utils.DataEvent, t SourceT) {
+	updatePayload, _ := json.Marshal(t)
+	Eb.PublishToChannel(channel, "update", updatePayload)
+}
+
 func WaitForConfig() {
 	for {
 		if initialized {

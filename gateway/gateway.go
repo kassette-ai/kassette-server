@@ -188,6 +188,25 @@ func (gateway *HandleT) startWebHandler() {
 	//r.POST("/web", webPageHandler)
 	r.POST("/extract", gateway.extractHandler)
 
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+		})
+	})
+
+	r.GET("/config", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"config": backendconfig.GetConfig(),
+		})
+	})
+
+	r.POST("/config", func(c *gin.Context) {
+
+		c.JSON(http.StatusOK, gin.H{
+			"config": backendconfig.GetConfig(),
+		})
+	})
+
 	CORSMiddleware()
 
 	serverPort := viper.GetString("serverPort")
