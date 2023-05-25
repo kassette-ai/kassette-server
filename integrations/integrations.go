@@ -19,7 +19,7 @@ type PostParameterT struct {
 	UserID        string
 	Payload       interface{}
 	Header        interface{}
-	RequestConfig interface{}
+	RequestConfig map[string]interface{}
 }
 
 func GetPostInfo(transformRaw json.RawMessage) PostParameterT {
@@ -34,7 +34,7 @@ func GetPostInfo(transformRaw json.RawMessage) PostParameterT {
 	misc.Assert(ok)
 	postInfo.Header, ok = parsedJSON.Get("header").Value().(interface{})
 	misc.Assert(ok)
-	postInfo.RequestConfig, ok = parsedJSON.Get("requestConfig").Value().(interface{})
+	postInfo.RequestConfig, ok = parsedJSON.Get("requestConfig").Value().(map[string]interface{})
 	misc.Assert(ok)
 	return postInfo
 }
@@ -74,4 +74,6 @@ const (
 	PostDataJSON
 	//PostDataXML means post data is sent as XML
 	PostDataXML
+
+	PostDataArray // Post data is sent as an array of JSON objects
 )

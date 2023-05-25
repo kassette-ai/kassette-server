@@ -79,11 +79,23 @@ func TestSourceSave(t *testing.T) {
 				Name:    "Camunda-test",
 				Enabled: true,
 				DestinationDefinition: DestinationDefinitionT{
-					ID:            "1",
-					Name:          "power_bi",
-					DisplayName:   "Power BI",
-					Config:        map[string]interface{}{},
+					ID:          "1",
+					Name:        "power_bi",
+					DisplayName: "Power BI",
+					Config: map[string]interface{}{
+						"endpoint":      "https://api.powerbi.com/beta/c4ae8b92-c69e-4f24-a16b-9a034ffa7e79/datasets/1c250cc6-b561-4ba2-bcbf-e0c19c7177ee/rows?experience=power-bi&key=yWZBciGHfQkbbTrv4joIJZ3NMFDPClJ0JpQXX4Hul0SbyjKS455l6a2zKhgRF7fLcgszB0enmkANATj%2B1FSFGw%3D%3D",
+						"requestMethod": "POST",
+						"requestFormat": "ARRAY"},
 					ResponseRules: nil,
+				},
+
+				Transformations: TransformationT{
+					VersionID: "1",
+					ID:        "1",
+					Config: map[string]interface{}{
+						"originalTimestamp":    "Time",
+						"camunda_process_name": "Data",
+					},
 				},
 			},
 		},

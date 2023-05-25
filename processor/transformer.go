@@ -125,11 +125,36 @@ func (trans *transformerHandleT) transformWorker() {
 func transformToPayload(m map[string]interface{}) map[string]interface{} {
 
 	rawTransform := make(map[string]interface{})
-	rawTransform["payload"] = m["message"]
-	rawTransform["endpoint"] = "https://api.powerbi.com/beta/c4ae8b92-c69e-4f24-a16b-9a034ffa7e79/datasets/1c250cc6-b561-4ba2-bcbf-e0c19c7177ee/rows?experience=power-bi&key=yWZBciGHfQkbbTrv4joIJZ3NMFDPClJ0JpQXX4Hul0SbyjKS455l6a2zKhgRF7fLcgszB0enmkANATj%2B1FSFGw%3D%3D"
+
+	rawPayload := m["message"].(map[string]interface{})
+	// This is where the transformation happens
+	destination := m["destination"].(backendconfig.DestinationT)
+
+	transformationsMap := destination.Transformations.Config
+
+	transformedPayload := make(map[string]interface{})
+
+	for k, _ := range rawPayload {
+		if _, ok := transformationsMap[k]; ok {
+			switch val := transformationsMap[k].(type) {
+			case bool:
+				if val {
+					transformedPayload[k] = rawPayload[k]
+				}
+			case string:
+				//If it's a string we rename the key
+				transformedPayload[val] = rawPayload[k]
+			}
+		}
+	}
+
+	// Converting to array to support PowerBi temporarily
+
+	rawTransform["payload"] = [1]interface{}{transformedPayload}
+	rawTransform["endpoint"] = destination.DestinationDefinition.Config["endpoint"]
 	rawTransform["userId"] = "userId"
 	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
-	rawTransform["requestConfig"] = "config"
+	rawTransform["requestConfig"] = destination.DestinationDefinition.Config
 
 	logger.Debug(fmt.Sprintf("Transformed payload: %v", rawTransform))
 

@@ -45,7 +45,7 @@ type DestinationT struct {
 	Config                map[string]interface{}
 	Enabled               bool
 	WorkspaceID           string
-	Transformations       []TransformationT
+	Transformations       TransformationT
 	IsProcessorEnabled    bool
 	RevisionID            string
 }

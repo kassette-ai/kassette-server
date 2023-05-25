@@ -17,23 +17,22 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 
 	//Parse the response to get parameters
 	postInfo := integrations.GetPostInfo(jsonData)
-	requestMethod := "POST"
 
-	//requestConfig, ok := postInfo.RequestConfig.(map[string]interface{})
-	//misc.Assert(ok)
-	//requestMethod, ok := requestConfig["requestMethod"].(string)
-	//misc.Assert(ok && (requestMethod == "POST" || requestMethod == "GET"))
-	//requestFormat := requestConfig["requestFormat"].(string)
-	//misc.Assert(ok)
+	requestMethod, ok := postInfo.RequestConfig["requestMethod"].(string)
+	misc.Assert(ok && (requestMethod == "POST" || requestMethod == "GET"))
+	requestFormat := postInfo.RequestConfig["requestFormat"].(string)
+	misc.Assert(ok)
 
-	//switch requestFormat {
-	//case "PARAMS":
-	//	postInfo.Type = integrations.PostDataKV
-	//case "JSON":
-	postInfo.Type = integrations.PostDataJSON
-	//default:
-	//	misc.Assert(false)
-	//}
+	switch requestFormat {
+	case "PARAMS":
+		postInfo.Type = integrations.PostDataKV
+	case "JSON":
+		postInfo.Type = integrations.PostDataJSON
+	case "ARRAY":
+		postInfo.Type = integrations.PostDataArray
+	default:
+		misc.Assert(false)
+	}
 
 	var req *http.Request
 	var err error
@@ -56,6 +55,12 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 		payloadJSON, ok := postInfo.Payload.(map[string]interface{})
 		misc.Assert(ok)
 		jsonValue, err := json.Marshal(payloadJSON)
+		misc.AssertError(err)
+		req.Body = io.NopCloser(bytes.NewReader(jsonValue))
+	} else if postInfo.Type == integrations.PostDataArray {
+		payloadArray, ok := postInfo.Payload.([]interface{})
+		misc.Assert(ok)
+		jsonValue, err := json.Marshal(payloadArray)
 		misc.AssertError(err)
 		req.Body = io.NopCloser(bytes.NewReader(jsonValue))
 	} else {
