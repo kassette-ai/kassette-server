@@ -64,7 +64,7 @@ func main() {
 	go monitorDestRouters(&routerDB, &batchRouterDB)
 
 	var gateway gateway.HandleT
-	gateway.Setup(&gatewayDB)
+	gateway.Setup(&gatewayDB, &configDB)
 
 }
 

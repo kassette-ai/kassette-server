@@ -44,7 +44,7 @@ func (cd *HandleT) pollConfigUpdate() {
 			initialized = true
 			Eb.Publish("backendconfig", sourceJSON)
 		}
-		time.Sleep(time.Duration(pollInterval))
+		time.Sleep(pollInterval)
 	}
 }
 
@@ -57,9 +57,11 @@ func Subscribe(channel chan utils.DataEvent) {
 	Eb.PublishToChannel(channel, "backendconfig", curSourceJSON)
 }
 
-func Update(channel chan utils.DataEvent, t SourceT) {
-	updatePayload, _ := json.Marshal(t)
-	Eb.PublishToChannel(channel, "update", updatePayload)
+func (cd *HandleT) Update(t SourceT, write_key string) {
+	if cd.insertSource(write_key, t) {
+		newSourceJSON, _ := json.Marshal(t)
+		Eb.Publish("backendConfig", newSourceJSON)
+	}
 }
 
 func WaitForConfig() {
@@ -111,7 +113,6 @@ func (cd *HandleT) Setup() {
 	}
 
 	cd.createConfigTable()
-
 }
 
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
@@ -168,19 +169,21 @@ func (cd *HandleT) createConfigTable() {
 	return
 }
 
-func (cd *HandleT) createSource(writeKey string, source SourceT) {
+func (cd *HandleT) insertSource(writeKey string, source SourceT) bool {
 
 	var err error
 
 	sourceJson, _ := json.Marshal(source)
 
-	sqlStatement := fmt.Sprintf(`INSERT INTO source_config (source, write_key) VALUES ('%s', '%s')`, sourceJson, writeKey)
+	sqlStatement := fmt.Sprintf(`INSERT INTO source_config (id, source, write_key) VALUES ('%s', '%s', '%s') 
+                                                  ON CONFLICT (ID) DO UPDATE SET source = '%s', write_key = '%s'`,
+		source.ID, sourceJson, writeKey, sourceJson, writeKey)
 
 	_, err = cd.dbHandle.Exec(sqlStatement)
 
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to create source_config table %s", err))
+		logger.Error(fmt.Sprintf("Failed to insert to source_config table %s", err))
+		return false
 	}
-
-	return
+	return true
 }

@@ -101,7 +101,7 @@ func TestSourceSave(t *testing.T) {
 		},
 	}
 
-	cb.createSource("write_key", testSource)
+	cb.insertSource("write_key", testSource)
 
 	assert.True(t, true, "True is true!")
 

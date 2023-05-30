@@ -83,6 +83,7 @@ type HandleT struct {
 	webRequestQ   chan *webRequestT
 	batchRequestQ chan *batchWebRequestT
 	jobsDB        *jobsdb.HandleT
+	configDB      *backendconfig.HandleT
 	ackCount      uint64
 	recvCount     uint64
 
@@ -158,12 +159,13 @@ func backendConfigSubscriber() {
 	}
 }
 
-func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT) {
+func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, configDB *backendconfig.HandleT) {
 	loadConfig()
 	gateway.webRequestQ = make(chan *webRequestT)
 	gateway.batchRequestQ = make(chan *batchWebRequestT)
 
 	gateway.jobsDB = jobsDB
+	gateway.configDB = configDB
 
 	gateway.userWorkerBatchRequestQ = make(chan *userWorkerBatchRequestT, maxDBBatchSize)
 	gateway.batchUserWorkerBatchRequestQ = make(chan *batchUserWorkerBatchRequestT, maxDBWriterProcess)
@@ -185,6 +187,8 @@ func (gateway *HandleT) startWebHandler() {
 	r := gin.Default()
 	r.Use(gin.Recovery())
 
+	CORSMiddleware()
+
 	//r.POST("/web", webPageHandler)
 	r.POST("/extract", gateway.extractHandler)
 
@@ -195,19 +199,23 @@ func (gateway *HandleT) startWebHandler() {
 	})
 
 	r.GET("/config", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"config": backendconfig.GetConfig(),
-		})
+		c.JSON(http.StatusOK, backendconfig.GetConfig())
 	})
 
 	r.POST("/config", func(c *gin.Context) {
 
-		c.JSON(http.StatusOK, gin.H{
-			"config": backendconfig.GetConfig(),
-		})
-	})
+		var config backendconfig.SourceT
+		err := c.BindJSON(&config)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"response": "invalid JSON",
+			})
+			return
+		}
+		gateway.configDB.Update(config, config.WriteKey)
 
-	CORSMiddleware()
+		c.JSON(http.StatusOK, backendconfig.GetConfig())
+	})
 
 	serverPort := viper.GetString("serverPort")
 
