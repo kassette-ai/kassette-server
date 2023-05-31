@@ -68,6 +68,8 @@ func loadConfig() {
 
 	// Maximum request size to gateway
 	maxReqSize = viper.GetInt("gateway.maxReqSizeInKB") * 1000
+
+	allowReqsWithoutUserIDAndAnonymousID = viper.GetBool("gateway.allowReqsWithoutUserIDAndAnonymousID")
 }
 
 type userWorkerBatchRequestT struct {

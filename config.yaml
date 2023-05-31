@@ -7,9 +7,6 @@ database:
   port: 5432
   ssl_mode: disable
 
-
-
-
 gateway:
   webPort: 8080
   maxBatchSize: 32
@@ -17,6 +14,7 @@ gateway:
   maxDBWriterProcess: 4
   maxReqSizeInKB: 1000000
   maxWebReqQSize: 1
+  allowReqsWithoutUserIDAndAnonymousID: true
 
 router:
   jobQueryBatchSize: 10
@@ -33,8 +31,6 @@ router:
   useTestSink: false
   maxFailedCountForJob: 3
   testSinkURL: http://localhost:8080/testSink
-
-
 
 logLevel: INFO
 serverPort: 8088

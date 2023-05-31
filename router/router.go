@@ -106,7 +106,7 @@ func (rt *HandleT) statusInsertLoop() {
 
 		select {
 		case jobStatus := <-rt.responseQ:
-			logger.Info(fmt.Sprintf("%v Router :: Got back status error %v and state %v for job %v", rt.destID, jobStatus.status.ErrorCode,
+			logger.Info(fmt.Sprintf("%v Router :: Got back status %v and state %v for job %v", rt.destID, jobStatus.status.ErrorCode,
 				jobStatus.status.JobState, jobStatus.status.JobID))
 			responseList = append(responseList, jobStatus)
 

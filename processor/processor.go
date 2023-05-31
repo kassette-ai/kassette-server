@@ -304,8 +304,9 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 		}
 		userID, ok := misc.GetKassetteEventUserID(eventList)
 		if !ok {
-			logger.Error("Failed to get userID for job")
-			continue
+			//logger.Error("Failed to get userID for job")
+			//continue
+			userID = "default"
 		}
 		_, ok = proc.userJobListMap[userID]
 		if !ok {

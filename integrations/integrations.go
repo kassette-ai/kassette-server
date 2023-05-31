@@ -40,23 +40,23 @@ func GetPostInfo(transformRaw json.RawMessage) PostParameterT {
 }
 
 func GetDestinationIDs(clientEvent interface{}, destNameIDMap map[string]backendconfig.DestinationDefinitionT) (retVal []string) {
-	clientIntgs, ok := misc.GetKassetteEventVal("integrations", clientEvent)
-	if clientIntgs == nil || !ok {
-		return
-	}
-
-	clientIntgsList, ok := clientIntgs.(map[string]interface{})
-	if !ok {
-		return
-	}
+	//clientIntgs, ok := misc.GetKassetteEventVal("integrations", clientEvent)
+	//if clientIntgs == nil || !ok {
+	//	return
+	//}
+	//
+	//clientIntgsList, ok := clientIntgs.(map[string]interface{})
+	//if !ok {
+	//	return
+	//}
 	var outVal []string
 	for dest := range destNameIDMap {
-		if clientIntgsList[dest] == false {
-			continue
-		}
-		if (clientIntgsList["All"] != false) || clientIntgsList[dest] == true {
-			outVal = append(outVal, destNameIDMap[dest].Name)
-		}
+		//if clientIntgsList[dest] == false {
+		//	continue
+		//}
+		//if (clientIntgsList["All"] != false) || clientIntgsList[dest] == true {
+		outVal = append(outVal, destNameIDMap[dest].Name)
+		//}
 	}
 	retVal = outVal
 	return
