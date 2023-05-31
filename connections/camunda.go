@@ -144,7 +144,7 @@ func startWorker(activitiInstanceSql ActivitiInstanceSql) {
 	if activitiInstanceSql.Actinst_duration.Valid {
 		activitiInstance.Actinst_duration = int(activitiInstanceSql.Actinst_duration.Int32)
 	} else {
-		activitiInstance.Actinst_duration = ""
+		activitiInstance.Actinst_duration = 0
 	}
 
 	if activitiInstanceSql.Actinst_act_inst_state_.Valid {
