@@ -715,6 +715,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			body := req.requestPayload
 
 			writeKey := "write_key"
+			logger.Info(fmt.Sprint("hard coded writeKey: ", writeKey))
 
 			// set anonymousId if not set in payload
 			var index int

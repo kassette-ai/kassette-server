@@ -210,6 +210,8 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 					}
 				}
 			}
+		} else {
+			logger.Info("Error parsing event batch, possible invalid event list")
 		}
 
 		//Mark the batch event as processed
@@ -236,6 +238,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(destTransformEventList)))
 		if !response.Success {
+			logger.Error(fmt.Sprintf("Error in transformation for destination %v", destID))
 			continue
 		}
 
