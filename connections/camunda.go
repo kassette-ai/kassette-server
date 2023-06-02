@@ -49,6 +49,10 @@ type ActivitiInstance struct {
 	Detail_name_            string `json:"detail_name_"`
 }
 
+type Payload struct {
+	Batch []ActivitiInstance `json:"batch"`
+}
+
 func GetConnectionString() string {
 	return fmt.Sprintf("host=%s port=%s user=%s "+
 		"password=%s dbname=%s sslmode=%s",
@@ -87,8 +91,8 @@ func submitPayload(jsonData []byte) {
 	log.Printf("Request successful!\n")
 }
 
-func startWorker(activitiInstanceSql ActivitiInstanceSql) {
-	// Do work here
+func sql2strings(activitiInstanceSql ActivitiInstanceSql) ActivitiInstance {
+
 	var activitiInstance ActivitiInstance
 	log.Printf("fetched record %s, with name %s at %s", activitiInstanceSql.Actinst_proc_inst_id_.String, activitiInstanceSql.Actinst_act_name_.String, activitiInstanceSql.Actinst_start_time_.Time.String())
 
@@ -176,8 +180,15 @@ func startWorker(activitiInstanceSql ActivitiInstanceSql) {
 	} else {
 		activitiInstance.Detail_name_ = ""
 	}
+	return activitiInstance
+}
 
-	jsonData, err := json.Marshal(activitiInstance)
+func startWorker(activitiInstances []ActivitiInstance) {
+	// create the payload
+	var payload Payload
+	payload.Batch = activitiInstances
+
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -205,7 +216,10 @@ func main() {
 	var lastTimestamp time.Time
 	lastIngested := make([]string, 0)
 
-	dbBatchSize := viper.GetString("database.batch_size")
+	batchSubmit := make([]ActivitiInstance, 0)
+	kassetteBatchSize := viper.GetInt("kassette-server.batchSize")
+
+	dbBatchSize := viper.GetString("database.batchSize")
 
 	log.Printf("Connecting to Database: %s\n", psqlInfo)
 
@@ -283,16 +297,26 @@ func main() {
 					continue
 				}
 
-				// Start a worker for the new record
-				startWorker(activitiInstanceSql)
-
-				// Update the last timestamp seen
+				// Update the last seen timestamp of processed record
+				// or store IDs of records belonging to the same timestamp to exclude them from the next select
+				// to avoid duplication
 				if activitiInstanceSql.Actinst_start_time_.Time.After(lastTimestamp) {
 					lastTimestamp = activitiInstanceSql.Actinst_start_time_.Time
 					lastIngested = nil
 				} else {
 					lastIngested = append(lastIngested, activitiInstanceSql.Actinst_id_.String)
 				}
+
+				//save record into a batch
+				batchSubmit = append(batchSubmit, sql2strings(activitiInstanceSql))
+				if len(batchSubmit) >= kassetteBatchSize {
+					startWorker(batchSubmit) //submit a batch if number of records enough
+					batchSubmit = nil
+				}
+			}
+			if len(batchSubmit) > 0 {
+				startWorker(batchSubmit)
+				batchSubmit = nil
 			}
 		}
 	}
