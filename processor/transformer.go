@@ -155,7 +155,7 @@ func transformToPayload(m map[string]interface{}) map[string]interface{} {
 	rawTransform["payload"] = [1]interface{}{transformedPayload}
 	rawTransform["endpoint"] = destination.DestinationDefinition.Config["endpoint"]
 	rawTransform["userId"] = "userId"
-	//rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
+	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
 	rawTransform["requestConfig"] = destination.DestinationDefinition.Config
 
 	logger.Debug(fmt.Sprintf("Transformed payload: %v", rawTransform))

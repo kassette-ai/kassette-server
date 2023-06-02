@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/utils/logger"
@@ -185,6 +186,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 		job := <-worker.channel
 		var respStatusCode, attempts int
 		var respStatus string
+		var respBody string
 
 		logger.Info(fmt.Sprintf("Router :: trying to send payload %s to %s", job.EventPayload, rt.destID))
 
@@ -237,7 +239,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 		for attempts = 0; attempts < ser; attempts++ {
 			logger.Info(fmt.Sprintf("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser))
 
-			respStatusCode, respStatus, _ = rt.netHandle.sendPost(job.EventPayload)
+			respStatusCode, respStatus, respBody = rt.netHandle.sendPost(job.EventPayload)
 
 			if useTestSink {
 				//Internal test. No reason to sleep
@@ -276,7 +278,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 			RetryTime:     time.Now(),
 			AttemptNum:    job.LastJobStatus.AttemptNum,
 			ErrorCode:     respStatus,
-			ErrorResponse: []byte(`{}`),
+			ErrorResponse: json.RawMessage(respBody),
 		}
 
 		if respStatusCode == http.StatusOK {
