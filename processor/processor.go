@@ -118,6 +118,7 @@ func (proc *HandleT) mainLoop() {
 			proc.gatewayDB.UpdateJobStatus(statusList, []string{gateway.CustomVal})
 			proc.addJobsToSessions(combinedList)
 		} else {
+			logger.Info("Processing jobs for destinations")
 			proc.processJobsForDest(combinedList, nil)
 		}
 		//
@@ -306,12 +307,15 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 		eventList, ok := misc.ParseKassetteEventBatch(job.EventPayload)
 		if !ok {
 			//bad event
+			failedPayload, _ := job.EventPayload.MarshalJSON()
+			logger.Error(fmt.Sprintf("Failed to parse event: %v", failedPayload))
 			continue
 		}
 		userID, ok := misc.GetKassetteEventUserID(eventList)
 		if !ok {
 			//logger.Error("Failed to get userID for job")
 			//continue
+			logger.Info("Failed to get userID for job, setting to default")
 			userID = "default"
 		}
 		_, ok = proc.userJobListMap[userID]
@@ -339,7 +343,6 @@ func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 			misc.Assert(pqItem.index != -1)
 			proc.userJobPQ.Update(pqItem, time.Now())
 		}
-
 	}
 
 	if len(processUserIDs) > 0 {
