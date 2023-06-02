@@ -351,7 +351,7 @@ func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 		return
 	}
 	pqErr := err.(*pq.Error)
-	logger.Fatal(fmt.Sprintf("Failed to store job", pqErr))
+	logger.Error(fmt.Sprintf("Failed to store job: %s", pqErr))
 	return
 }
 
