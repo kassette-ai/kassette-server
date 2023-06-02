@@ -6,9 +6,10 @@ database:
   password: password
   port: 5432
   ssl_mode: disable
-  batch_size: 100
+  batchSize: 100
 kassette-server:
   url: http://localhost:8080
+  batchSize: 10
 kassette-agent:
   uid: camunda
 

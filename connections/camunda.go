@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-type ActivitiInstance struct {
+type ActivitiInstanceSql struct {
 	Actinst_id_             sql.NullString `json:"actinst_id_"`
 	Actinst_proc_inst_id_   sql.NullString `json:"actinst_proc_inst_id_"`
 	Actinst_act_name_       sql.NullString `json:"actinst_act_name_"`
@@ -30,6 +30,27 @@ type ActivitiInstance struct {
 	Detail_type_            sql.NullString `json:"detail_type_"`
 	Detail_var_type_        sql.NullString `json:"detail_var_type_"`
 	Detail_name_            sql.NullString `json:"detail_name_"`
+}
+
+type ActivitiInstance struct {
+	Actinst_id_             string `json:"actinst_id_"`
+	Actinst_proc_inst_id_   string `json:"actinst_proc_inst_id_"`
+	Actinst_act_name_       string `json:"actinst_act_name_"`
+	Actinst_act_type_       string `json:"actinst_act_type_"`
+	Actinst_proc_def_key_   string `json:"actinst_proc_def_key_"`
+	Actinst_assignee_       string `json:"actinst_assignee_"`
+	Actinst_start_time_     string `json:"actinst_start_time_"`
+	Actinst_end_time_       string `json:"actinst_end_time_"`
+	Actinst_duration        int    `json:"actinst_duration_"`
+	Actinst_act_inst_state_ string `json:"actinst_act_inst_state_"`
+	Procdef_name_           string `json:"procdef_name_"`
+	Detail_type_            string `json:"detail_type_"`
+	Detail_var_type_        string `json:"detail_var_type_"`
+	Detail_name_            string `json:"detail_name_"`
+}
+
+type Payload struct {
+	Batch []ActivitiInstance `json:"batch"`
 }
 
 func GetConnectionString() string {
@@ -70,10 +91,104 @@ func submitPayload(jsonData []byte) {
 	log.Printf("Request successful!\n")
 }
 
-func startWorker(activitiInstance ActivitiInstance) {
-	// Do work here
-	log.Printf("fetched record %s, with name %s at %s", activitiInstance.Actinst_proc_inst_id_.String, activitiInstance.Actinst_act_name_.String, activitiInstance.Actinst_start_time_.Time.String())
-	jsonData, err := json.Marshal(activitiInstance)
+func sql2strings(activitiInstanceSql ActivitiInstanceSql) ActivitiInstance {
+
+	var activitiInstance ActivitiInstance
+	log.Printf("fetched record %s, with name %s at %s", activitiInstanceSql.Actinst_proc_inst_id_.String, activitiInstanceSql.Actinst_act_name_.String, activitiInstanceSql.Actinst_start_time_.Time.String())
+
+	// convert SQL type into Strings
+	if activitiInstanceSql.Actinst_id_.Valid {
+		activitiInstance.Actinst_id_ = activitiInstanceSql.Actinst_id_.String
+	} else {
+		activitiInstance.Actinst_id_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_proc_inst_id_.Valid {
+		activitiInstance.Actinst_proc_inst_id_ = activitiInstanceSql.Actinst_proc_inst_id_.String
+	} else {
+		activitiInstance.Actinst_proc_inst_id_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_act_name_.Valid {
+		activitiInstance.Actinst_act_name_ = activitiInstanceSql.Actinst_act_name_.String
+	} else {
+		activitiInstance.Actinst_act_name_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_act_type_.Valid {
+		activitiInstance.Actinst_act_type_ = activitiInstanceSql.Actinst_act_type_.String
+	} else {
+		activitiInstance.Actinst_act_type_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_proc_def_key_.Valid {
+		activitiInstance.Actinst_proc_def_key_ = activitiInstanceSql.Actinst_proc_def_key_.String
+	} else {
+		activitiInstance.Actinst_proc_def_key_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_assignee_.Valid {
+		activitiInstance.Actinst_assignee_ = activitiInstanceSql.Actinst_assignee_.String
+	} else {
+		activitiInstance.Actinst_assignee_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_start_time_.Valid {
+		activitiInstance.Actinst_start_time_ = activitiInstanceSql.Actinst_start_time_.Time.String()
+	} else {
+		activitiInstance.Actinst_start_time_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_end_time_.Valid {
+		activitiInstance.Actinst_end_time_ = activitiInstanceSql.Actinst_end_time_.Time.String()
+	} else {
+		activitiInstance.Actinst_end_time_ = ""
+	}
+
+	if activitiInstanceSql.Actinst_duration.Valid {
+		activitiInstance.Actinst_duration = int(activitiInstanceSql.Actinst_duration.Int32)
+	} else {
+		activitiInstance.Actinst_duration = 0
+	}
+
+	if activitiInstanceSql.Actinst_act_inst_state_.Valid {
+		activitiInstance.Actinst_act_inst_state_ = activitiInstanceSql.Actinst_act_inst_state_.String
+	} else {
+		activitiInstance.Actinst_act_inst_state_ = ""
+	}
+
+	if activitiInstanceSql.Procdef_name_.Valid {
+		activitiInstance.Procdef_name_ = activitiInstanceSql.Procdef_name_.String
+	} else {
+		activitiInstance.Procdef_name_ = ""
+	}
+
+	if activitiInstanceSql.Detail_type_.Valid {
+		activitiInstance.Detail_type_ = activitiInstanceSql.Detail_type_.String
+	} else {
+		activitiInstance.Detail_type_ = ""
+	}
+
+	if activitiInstanceSql.Detail_var_type_.Valid {
+		activitiInstance.Detail_var_type_ = activitiInstanceSql.Detail_var_type_.String
+	} else {
+		activitiInstance.Detail_var_type_ = ""
+	}
+
+	if activitiInstanceSql.Detail_name_.Valid {
+		activitiInstance.Detail_name_ = activitiInstanceSql.Detail_name_.String
+	} else {
+		activitiInstance.Detail_name_ = ""
+	}
+	return activitiInstance
+}
+
+func startWorker(activitiInstances []ActivitiInstance) {
+	// create the payload
+	var payload Payload
+	payload.Batch = activitiInstances
+
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -101,7 +216,10 @@ func main() {
 	var lastTimestamp time.Time
 	lastIngested := make([]string, 0)
 
-	dbBatchSize := viper.GetString("database.batch_size")
+	batchSubmit := make([]ActivitiInstance, 0)
+	kassetteBatchSize := viper.GetInt("kassette-server.batchSize")
+
+	dbBatchSize := viper.GetString("database.batchSize")
 
 	log.Printf("Connecting to Database: %s\n", psqlInfo)
 
@@ -158,37 +276,47 @@ func main() {
 
 			// Process the new records
 			for rows.Next() {
-				var activitiInstance ActivitiInstance
-				err := rows.Scan(&activitiInstance.Actinst_id_,
-					&activitiInstance.Actinst_proc_inst_id_,
-					&activitiInstance.Actinst_act_name_,
-					&activitiInstance.Actinst_act_type_,
-					&activitiInstance.Actinst_proc_def_key_,
-					&activitiInstance.Actinst_assignee_,
-					&activitiInstance.Actinst_start_time_,
-					&activitiInstance.Actinst_end_time_,
-					&activitiInstance.Actinst_duration,
-					&activitiInstance.Actinst_act_inst_state_,
-					&activitiInstance.Procdef_name_,
-					&activitiInstance.Detail_type_,
-					&activitiInstance.Detail_var_type_,
-					&activitiInstance.Detail_name_)
+				var activitiInstanceSql ActivitiInstanceSql
+				err := rows.Scan(&activitiInstanceSql.Actinst_id_,
+					&activitiInstanceSql.Actinst_proc_inst_id_,
+					&activitiInstanceSql.Actinst_act_name_,
+					&activitiInstanceSql.Actinst_act_type_,
+					&activitiInstanceSql.Actinst_proc_def_key_,
+					&activitiInstanceSql.Actinst_assignee_,
+					&activitiInstanceSql.Actinst_start_time_,
+					&activitiInstanceSql.Actinst_end_time_,
+					&activitiInstanceSql.Actinst_duration,
+					&activitiInstanceSql.Actinst_act_inst_state_,
+					&activitiInstanceSql.Procdef_name_,
+					&activitiInstanceSql.Detail_type_,
+					&activitiInstanceSql.Detail_var_type_,
+					&activitiInstanceSql.Detail_name_)
 
 				if err != nil {
 					log.Fatal(fmt.Sprintf("Error reading row: %v\n", err))
 					continue
 				}
 
-				// Start a worker for the new record
-				startWorker(activitiInstance)
-
-				// Update the last timestamp seen
-				if activitiInstance.Actinst_start_time_.Time.After(lastTimestamp) {
-					lastTimestamp = activitiInstance.Actinst_start_time_.Time
+				// Update the last seen timestamp of processed record
+				// or store IDs of records belonging to the same timestamp to exclude them from the next select
+				// to avoid duplication
+				if activitiInstanceSql.Actinst_start_time_.Time.After(lastTimestamp) {
+					lastTimestamp = activitiInstanceSql.Actinst_start_time_.Time
 					lastIngested = nil
 				} else {
-					lastIngested = append(lastIngested, activitiInstance.Actinst_id_.String)
+					lastIngested = append(lastIngested, activitiInstanceSql.Actinst_id_.String)
 				}
+
+				//save record into a batch
+				batchSubmit = append(batchSubmit, sql2strings(activitiInstanceSql))
+				if len(batchSubmit) >= kassetteBatchSize {
+					startWorker(batchSubmit) //submit a batch if number of records enough
+					batchSubmit = nil
+				}
+			}
+			if len(batchSubmit) > 0 {
+				startWorker(batchSubmit)
+				batchSubmit = nil
 			}
 		}
 	}
