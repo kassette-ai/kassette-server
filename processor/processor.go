@@ -88,8 +88,8 @@ func (proc *HandleT) mainLoop() {
 		unprocessedList := proc.gatewayDB.GetUnprocessed([]string{gateway.CustomVal}, toQuery)
 
 		if len(unprocessedList)+len(retryList) == 0 {
-
-			time.Sleep(2)
+			logger.Debug("No unprocessed and retry jobs to process")
+			time.Sleep(20 * time.Second)
 			continue
 		}
 
@@ -297,6 +297,8 @@ func getTimestampFromEvent(event map[string]interface{}, field string) time.Time
 
 func (proc *HandleT) addJobsToSessions(jobList []*jobsdb.JobT) {
 
+	logger.Debug(fmt.Sprintf("Adding %d jobs to sessions", len(jobList)))
+
 	proc.userPQLock.Lock()
 
 	//List of users whose jobs need to be processed
@@ -503,7 +505,7 @@ func (proc *HandleT) createSessions() {
 		//Now jobs
 		if proc.userJobPQ.Len() == 0 {
 			proc.userPQLock.Unlock()
-			time.Sleep(1)
+			time.Sleep(10 * time.Millisecond)
 			continue
 		}
 
@@ -512,6 +514,7 @@ func (proc *HandleT) createSessions() {
 		if time.Since(oldestItem.lastTS) < time.Duration(sessionThresholdInS) {
 			proc.userPQLock.Unlock()
 			sleepTime := time.Duration(sessionThresholdInS) - time.Since(oldestItem.lastTS)
+			logger.Debug(fmt.Sprint("Sleeping", sleepTime.String()))
 			time.Sleep(sleepTime)
 			continue
 		}
@@ -542,6 +545,8 @@ func (proc *HandleT) createSessions() {
 		proc.userPQLock.Unlock()
 		if len(userJobsToProcess) > 0 {
 			proc.processUserJobs(userJobsToProcess, userEventsToProcess)
+		} else {
+			logger.Debug("No jobs to process")
 		}
 	}
 }

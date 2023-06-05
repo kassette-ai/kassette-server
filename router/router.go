@@ -255,8 +255,8 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				if worker.sleepTime > maxSleep {
 					worker.sleepTime = maxSleep
 				}
-				log.Printf("%v Router :: worker %v sleeping for  %v ",
-					rt.destID, worker.workerID, worker.sleepTime)
+				logger.Info(fmt.Sprint("%v Router :: worker %v sleeping for  %v ",
+					rt.destID, worker.workerID, worker.sleepTime))
 				time.Sleep(worker.sleepTime * time.Second)
 				continue
 			} else {
