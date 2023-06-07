@@ -352,7 +352,7 @@ func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 	}
 	pqErr := err.(*pq.Error)
 	logger.Error(fmt.Sprintf("Failed to store job: %s", pqErr))
-	return
+	return pqErr.Message
 }
 
 func (jd *HandleT) updateJobStatusDS(ds dataSetT, statusList []*JobStatusT, customValFilters []string) (err error) {
@@ -606,11 +606,12 @@ func (jd *HandleT) storeJobsDS(ds dataSetT, copyID bool, retryEach bool, jobList
 		if retryEach {
 			errorMessagesMap[job.UUID] = ""
 		}
+
 		if copyID {
-			_, err = stmt.Exec(job.JobID, job.UUID, job.Parameters, job.CustomVal,
+			_, err = stmt.Exec(job.JobID, job.UUID, string(job.Parameters), job.CustomVal,
 				string(job.EventPayload), job.CreatedAt, job.ExpireAt)
 		} else {
-			_, err = stmt.Exec(job.UUID, job.Parameters, job.CustomVal, string(job.EventPayload),
+			_, err = stmt.Exec(job.UUID, string(job.Parameters), job.CustomVal, string(job.EventPayload),
 				job.CreatedAt, job.ExpireAt)
 		}
 
@@ -623,12 +624,12 @@ func (jd *HandleT) storeJobsDS(ds dataSetT, copyID bool, retryEach bool, jobList
 			errorMessagesMap[job.UUID] = errorMessage
 		}
 	} else {
-
 		err = txn.Commit()
-
+		if err != nil {
+			logger.Error(fmt.Sprint("Error committing txn: %s", err))
+		}
 	}
-
-	return
+	return errorMessagesMap
 }
 
 func (jd *HandleT) mapDSToLevel(ds dataSetT) (int, []int) {
@@ -717,7 +718,7 @@ func (jd *HandleT) constructJSONQuery(paramKey string, jsonKey string, paramList
 
 /*
 UpdateJobStatus updates the status of a batch of jobs
-customValFilters[] is passed so we can efficinetly mark empty cache
+customValFilters[] is passed so we can efficiently mark empty cache
 Later we can move this to query
 */
 func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []string) {

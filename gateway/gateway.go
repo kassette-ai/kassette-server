@@ -230,7 +230,7 @@ func (gateway *HandleT) startWebHandler() {
 }
 
 func (gateway *HandleT) extractHandler(c *gin.Context) {
-	gateway.ProcessRequest(c, "single")
+	gateway.ProcessRequest(c, "batch")
 }
 
 func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) string {
@@ -240,6 +240,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 
 	errorMessage := <-done
 	if errorMessage != "" {
+		logger.Error(fmt.Sprint("Error processing request: ", errorMessage))
 		return "Error processing request"
 	}
 	return "Success"
@@ -252,6 +253,7 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 		logger.Error("Error getting payload and write key")
 		return
 	}
+
 	done := make(chan string, 1)
 	req := webRequestT{done: done, reqType: reqType, requestPayload: payload, writeKey: writeKey, ipAddr: c.Request.RemoteAddr, userIDHeader: c.Request.Header.Get("X-User-ID")}
 	gateway.webRequestQ <- &req
@@ -259,12 +261,13 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	// TODO: Should wait here until response is processed
 	errorMessage := <-done
 	if errorMessage != "" {
+		logger.Error(fmt.Sprint("Error processing request: ", errorMessage))
 		c.JSON(500, gin.H{"status": errorMessage})
 		return
 	}
 	atomic.AddUint64(&gateway.ackCount, 1)
 
-	c.JSON(200, gin.H{"status": respMessage})
+	c.JSON(200, gin.H{"status": "ack"})
 }
 
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
@@ -746,7 +749,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 				CreatedAt:    time.Now(),
 				ExpireAt:     time.Now(),
 				CustomVal:    CustomVal,
-				EventPayload: []byte(body),
+				EventPayload: body,
 			}
 			jobList = append(jobList, &newJob)
 			jobIDReqMap[newJob.UUID] = req
@@ -757,7 +760,6 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 		for uuid, err := range errorMessagesMap {
 			jobIDReqMap[uuid].done <- err
 		}
-
 	}
 }
 

@@ -69,8 +69,9 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 
 	proc.transformer.Setup()
 
-	go proc.mainLoop()
 	go backendConfigSubscriber()
+	go proc.mainLoop()
+
 	if processSessions {
 		logger.Info("Starting session processor")
 		go proc.createSessions()
@@ -89,7 +90,7 @@ func (proc *HandleT) mainLoop() {
 
 		if len(unprocessedList)+len(retryList) == 0 {
 			logger.Debug("No unprocessed and retry jobs to process")
-			time.Sleep(20 * time.Second)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
@@ -212,7 +213,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 				}
 			}
 		} else {
-			logger.Info("Error parsing event batch, possible invalid event list")
+			logger.Info("Error parsing event batch, possible invalid event list (empty or not JSON)")
 		}
 
 		//Mark the batch event as processed
@@ -230,18 +231,25 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 
 	//Now do the actual transformation. We call it in batches, once
 	//for each destination ID
+	logger.Info("1")
 	for destID, destEventList := range eventsByDest {
 		//Call transform for this destination. Returns
 		//the JSON we can send to the destination
 		url := integrations.GetDestinationURL(destID)
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
+
+		logger.Info("2")
 		response := proc.transformer.Transform(destEventList, url, transformBatchSize)
+		logger.Info("3")
+
 		destTransformEventList := response.Events
-		logger.Info(fmt.Sprintf("Transform output size: %d", len(destTransformEventList)))
+		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		if !response.Success {
 			logger.Error(fmt.Sprintf("Error in transformation for destination %v", destID))
 			continue
 		}
+
+		logger.Info("4")
 
 		//Save the JSON in DB. This is what the router uses
 		for idx, destEvent := range destTransformEventList {
@@ -249,9 +257,17 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			destEventJSON, err := json.Marshal(destEvent)
 			//Should be a valid JSON since its our transformation
 			//but we handle anyway
+			//if err != nil {
+			//	continue
+			//} else {
+			//	logger.Info(fmt.Sprintf("Transfor
+			//}
 			if err != nil {
+				logger.Error(fmt.Sprintf("Error marshalling transformed event %v", err))
 				continue
 			}
+
+			logger.Info("5")
 
 			//Need to replace UUID his with messageID from client
 			id := uuid.New()
@@ -272,8 +288,14 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		}
 	}
 
+	logger.Info("6")
+
+	logger.Info(fmt.Sprintf("Storing Router jobs: %d", len(destJobs)))
 	//XX: Need to do this in a transaction
 	proc.routerDB.Store(destJobs)
+
+	logger.Info("7")
+	logger.Info(fmt.Sprintf("Updating job status for: %d", len(batchDestJobs)))
 	proc.gatewayDB.UpdateJobStatus(statusList, []string{gateway.CustomVal})
 	//XX: End of transaction
 }

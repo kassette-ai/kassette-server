@@ -108,17 +108,16 @@ type transformMessageT struct {
 
 func (trans *transformerHandleT) transformWorker() {
 
+	//batching payload
 	for job := range trans.requestQ {
+		logger.Info("9")
 
-		// Just sending the data back for now....
-		respArray := job.data.([]interface{})
+		reqArray := job.data.([]interface{})
+		respArray := transformBatchPayload(reqArray)
 
-		for _, respElem := range respArray {
-			respElemMap := transformToPayload(respElem.(map[string]interface{}))
-			trans.responseQ <- &transformMessageT{data: respElemMap, index: job.index}
-		}
+		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
+		logger.Info("10")
 	}
-
 }
 
 // transformToPayload function is used to transform the message to payload
@@ -150,9 +149,59 @@ func transformToPayload(m map[string]interface{}) map[string]interface{} {
 		}
 	}
 
-	// Converting to array to support PowerBi temporarily
+	// Converting to array to support PowerBi
 
 	rawTransform["payload"] = [1]interface{}{transformedPayload}
+	rawTransform["endpoint"] = destination.DestinationDefinition.Config["endpoint"]
+	rawTransform["userId"] = "userId"
+	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
+	rawTransform["requestConfig"] = destination.DestinationDefinition.Config
+
+	logger.Debug(fmt.Sprintf("Transformed payload: %v", rawTransform))
+
+	return rawTransform
+}
+
+func transformBatchPayload(m []interface{}) map[string]interface{} {
+
+	rawTransform := make(map[string]interface{})
+
+	// This is where the transformation happens
+	sample := m[0]
+	destination := sample.(map[string]interface{})["destination"].(backendconfig.DestinationT)
+
+	transformationsMap := destination.Transformations.Config
+
+	batchPayload := make([]interface{}, 0)
+
+	for _, rawMap := range m {
+
+		rawMap := rawMap.(map[string]interface{})
+		rawPayload := rawMap["message"].(map[string]interface{})
+		transformedPayload := make(map[string]interface{})
+
+		for k, _ := range rawPayload {
+
+			if _, ok := transformationsMap[k]; ok {
+				switch val := transformationsMap[k].(type) {
+				case bool:
+					if val {
+						transformedPayload[k] = rawPayload[k]
+					}
+				case string:
+					//If it's a string we rename the key
+					transformedPayload[val] = rawPayload[k]
+				}
+			} else {
+				transformedPayload[k] = rawPayload[k]
+			}
+
+		}
+		batchPayload = append(batchPayload, transformedPayload)
+	}
+
+	// Converting to array to support PowerBi
+	rawTransform["payload"] = [1]interface{}{batchPayload}
 	rawTransform["endpoint"] = destination.DestinationDefinition.Config["endpoint"]
 	rawTransform["userId"] = "userId"
 	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
@@ -168,6 +217,8 @@ func transformToPayload(m map[string]interface{}) map[string]interface{} {
 func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	url string, batchSize int) ResponseT {
 
+	logger.Info("Transform!!!!")
+
 	trans.accessLock.Lock()
 	defer trans.accessLock.Unlock()
 
@@ -180,7 +231,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	resQ := trans.responseQ
 
 	var toSendData interface{}
-	sourceIDList := []string{}
+	var sourceIDList []string
 	for _, clientEvent := range clientEvents {
 		sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["message"].(map[string]interface{})["source_id"].(string))
 	}
@@ -188,7 +239,6 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	for {
 		//The channel is still live and the last batch has been sent
 		//Construct the next batch
-
 		if reqQ != nil && toSendData == nil {
 			if batchSize > 0 {
 				clientBatch := make([]interface{}, 0)
@@ -210,6 +260,8 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 			}
 		}
 
+		logger.Info("8")
+
 		select {
 		//In case of batch event, index is the next Index
 		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, url: url}:
@@ -218,6 +270,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 			if inputIdx == len(clientEvents) {
 				reqQ = nil
 			}
+			logger.Info("11")
 		case data := <-resQ:
 			transformResponse = append(transformResponse, data)
 			outputIdx++
@@ -225,11 +278,21 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 			if reqQ == nil && outputIdx == totalSent {
 				resQ = nil
 			}
+			logger.Info("12")
 		}
+		if reqQ == nil && reqQ != nil && len(reqQ) == 0 {
+			break
+		}
+
 		if reqQ == nil && resQ == nil {
+			logger.Info("13")
 			break
 		}
 	}
+
+	logger.Info("14")
+
+	logger.Info(fmt.Sprintf("Sort events"))
 
 	//Sort the responses in the same order as input
 	sort.Slice(transformResponse, func(i, j int) bool {

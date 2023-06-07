@@ -29,7 +29,7 @@ router:
   randomWorkerAssign: true
   keepOrderOnFailure: false
   useTestSink: false
-  maxFailedCountForJob: 3
+  maxFailedCountForJob: 10
   testSinkURL: http://localhost:8080/testSink
 
 logLevel: INFO
