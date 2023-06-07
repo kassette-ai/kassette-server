@@ -201,7 +201,7 @@ func transformBatchPayload(m []interface{}) map[string]interface{} {
 	}
 
 	// Converting to array to support PowerBi
-	rawTransform["payload"] = [1]interface{}{batchPayload}
+	rawTransform["payload"] = batchPayload
 	rawTransform["endpoint"] = destination.DestinationDefinition.Config["endpoint"]
 	rawTransform["userId"] = "userId"
 	rawTransform["header"] = map[string]string{"Content-Type": "application/json"}
@@ -233,7 +233,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 	var toSendData interface{}
 	var sourceIDList []string
 	for _, clientEvent := range clientEvents {
-		sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["message"].(map[string]interface{})["source_id"].(string))
+		sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["source_id"].(string))
 	}
 
 	for {

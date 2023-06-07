@@ -189,18 +189,18 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 
 						shallowEventCopy["message"] = singularEventMap
 						shallowEventCopy["destination"] = reflect.ValueOf(destination).Interface()
-						shallowEventCopy["message"].(map[string]interface{})["request_ip"] = requestIP
-						shallowEventCopy["message"].(map[string]interface{})["source_id"] = gjson.GetBytes(batchEvent.Parameters, "source_id").Str
+						shallowEventCopy["request_ip"] = requestIP
+						shallowEventCopy["source_id"] = gjson.GetBytes(batchEvent.Parameters, "source_id").Str
 
 						// set timestamp skew based on timestamp fields from SDKs
 						originalTimestamp := getTimestampFromEvent(singularEventMap, "originalTimestamp")
 						sentAt := getTimestampFromEvent(singularEventMap, "sentAt")
 
 						// set all timestamps in RFC3339 format
-						shallowEventCopy["message"].(map[string]interface{})["receivedAt"] = receivedAt.Format(time.RFC3339)
-						shallowEventCopy["message"].(map[string]interface{})["originalTimestamp"] = originalTimestamp.Format(time.RFC3339)
-						shallowEventCopy["message"].(map[string]interface{})["sentAt"] = sentAt.Format(time.RFC3339)
-						shallowEventCopy["message"].(map[string]interface{})["timestamp"] = receivedAt.Add(-sentAt.Sub(originalTimestamp)).Format(time.RFC3339)
+						shallowEventCopy["receivedAt"] = receivedAt.Format(time.RFC3339)
+						shallowEventCopy["originalTimestamp"] = originalTimestamp.Format(time.RFC3339)
+						shallowEventCopy["sentAt"] = sentAt.Format(time.RFC3339)
+						shallowEventCopy["timestamp"] = receivedAt.Add(-sentAt.Sub(originalTimestamp)).Format(time.RFC3339)
 
 						//We have at-least one event so marking it good
 						_, ok = eventsByDest[destType]

@@ -58,7 +58,7 @@ func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
 		misc.AssertError(err)
 		req.Body = io.NopCloser(bytes.NewReader(jsonValue))
 	} else if postInfo.Type == integrations.PostDataArray {
-		payloadArray, ok := postInfo.Payload.([]interface{})
+		payloadArray := postInfo.Payload
 		misc.Assert(ok)
 		jsonValue, err := json.Marshal(payloadArray)
 		misc.AssertError(err)
