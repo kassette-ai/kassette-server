@@ -134,12 +134,14 @@ func sql2strings(activitiInstanceSql ActivitiInstanceSql) ActivitiInstance {
 	}
 
 	if activitiInstanceSql.Actinst_start_time_.Valid {
+		activitiInstanceSql.Actinst_start_time_.Time.Format("2006-01-02 15:04:05")
 		activitiInstance.Actinst_start_time_ = activitiInstanceSql.Actinst_start_time_.Time.String()
 	} else {
 		activitiInstance.Actinst_start_time_ = ""
 	}
 
 	if activitiInstanceSql.Actinst_end_time_.Valid {
+		activitiInstanceSql.Actinst_end_time_.Time.Format("2006-01-02 15:04:05")
 		activitiInstance.Actinst_end_time_ = activitiInstanceSql.Actinst_end_time_.Time.String()
 	} else {
 		activitiInstance.Actinst_end_time_ = ""
