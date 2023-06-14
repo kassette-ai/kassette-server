@@ -67,28 +67,40 @@ func GetConnectionString() string {
 func submitPayload(jsonData []byte) {
 	url := viper.GetString("kassette-server.url")
 	uid := viper.GetString("kassette-agent.uid")
+	maxAttempts := 20
+	initialBackoff := 1 * time.Second
+	maxBackoff := 10 * time.Second
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Fatal("Error creating request:", err)
-		return
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Fatal("Error creating request:", err)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("write_key", uid)
+		// Send the request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error sending request: %s", err)
+			backoff := time.Duration(attempt-1) * initialBackoff
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			time.Sleep(backoff)
+			continue
+		}
+		defer resp.Body.Close()
+		// Check the response status code
+		if resp.StatusCode != http.StatusOK {
+			log.Fatal("Request failed with status:", resp.StatusCode)
+			return
+		}
+		log.Printf("Request successful!\n")
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("write_key", uid)
-	// Send the request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatal("Error sending request:", err)
-		return
-	}
-	defer resp.Body.Close()
-	// Check the response status code
-	if resp.StatusCode != http.StatusOK {
-		log.Fatal("Request failed with status:", resp.StatusCode)
-		return
-	}
-	log.Printf("Request successful!\n")
+	log.Fatal("Max retry attempts reached")
 }
 
 func sql2strings(activitiInstanceSql ActivitiInstanceSql) ActivitiInstance {
@@ -213,7 +225,7 @@ func main() {
 	// tableName := "act_hi_actinst"
 	// timestampCol := "start_time_"
 	psqlInfo := GetConnectionString()
-	var lastTimestamp time.Time
+	lastTimestamp := time.Now().Add(-2 * time.Hour) //start ingesting data 2 hours back after restart
 	lastIngested := make([]string, 0)
 
 	batchSubmit := make([]ActivitiInstance, 0)
