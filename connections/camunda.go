@@ -99,6 +99,7 @@ func submitPayload(jsonData []byte) {
 			return
 		}
 		log.Printf("Request successful!\n")
+		return
 	}
 	log.Fatal("Max retry attempts reached")
 }
