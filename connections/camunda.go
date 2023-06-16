@@ -273,8 +273,8 @@ func main() {
 				"detail.var_type_,"+
 				"detail.name_ "+
 				"from act_hi_actinst as actinst "+
-				"join act_re_procdef as procdef on actinst.proc_def_key_=procdef.key_ "+
-				"join act_hi_detail as detail on actinst.execution_id_=detail.act_inst_id_ "+
+				"left join act_re_procdef as procdef on actinst.proc_def_key_=procdef.key_ "+
+				"left join act_hi_detail as detail on actinst.execution_id_=detail.act_inst_id_ "+
 				"where actinst.start_time_ > $1 "+
 				"and actinst.id_ not in ($2) "+
 				"limit %s;", dbBatchSize)
