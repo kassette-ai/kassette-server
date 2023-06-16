@@ -272,13 +272,12 @@ func main() {
 				"detail.type_,"+
 				"detail.var_type_,"+
 				"detail.name_ "+
-				"from act_hi_actinst as actinst,"+
-				"act_re_procdef as procdef,"+
-				"act_hi_detail as detail "+
+				"from act_hi_actinst as actinst "+
+				"join act_re_procdef as procdef on actinst.proc_def_key_=procdef.key_ "+
+				"join act_hi_detail as detail on actinst.execution_id_=detail.act_inst_id_ "+
 				"where actinst.start_time_ > $1 "+
 				"and actinst.id_ not in ($2) "+
-				"and actinst.proc_def_key_=procdef.key_ "+
-				"and actinst.execution_id_=detail.act_inst_id_ limit %s;", dbBatchSize)
+				"limit %s;", dbBatchSize)
 
 			rows, err := db.QueryContext(context.Background(), query, lastTimestamp, strings.Join(lastIngested, ", "))
 			if err != nil {
