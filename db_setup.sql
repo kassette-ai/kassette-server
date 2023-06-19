@@ -7,9 +7,3 @@ GRANT CONNECT ON DATABASE kassette TO kassette_user;
 \connect kassette;
 
 create schema events;
-
-
-
-
-
-

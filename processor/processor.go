@@ -231,16 +231,13 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 
 	//Now do the actual transformation. We call it in batches, once
 	//for each destination ID
-	logger.Info("1")
 	for destID, destEventList := range eventsByDest {
 		//Call transform for this destination. Returns
 		//the JSON we can send to the destination
 		url := integrations.GetDestinationURL(destID)
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
 
-		logger.Info("2")
 		response := proc.transformer.Transform(destEventList, url, transformBatchSize)
-		logger.Info("3")
 
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
@@ -248,8 +245,6 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			logger.Error(fmt.Sprintf("Error in transformation for destination %v", destID))
 			continue
 		}
-
-		logger.Info("4")
 
 		//Save the JSON in DB. This is what the router uses
 		for idx, destEvent := range destTransformEventList {
@@ -266,8 +261,6 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 				logger.Error(fmt.Sprintf("Error marshalling transformed event %v", err))
 				continue
 			}
-
-			logger.Info("5")
 
 			//Need to replace UUID his with messageID from client
 			id := uuid.New()

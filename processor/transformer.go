@@ -110,7 +110,6 @@ func (trans *transformerHandleT) transformWorker() {
 
 	//batching payload
 	for job := range trans.requestQ {
-		logger.Info("9")
 
 		reqArray := job.data.([]interface{})
 		respArray := transformBatchPayload(reqArray)

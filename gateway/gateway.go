@@ -161,6 +161,10 @@ func backendConfigSubscriber() {
 	}
 }
 
+func Init() {
+	loadConfig()
+}
+
 func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, configDB *backendconfig.HandleT) {
 	loadConfig()
 	gateway.webRequestQ = make(chan *webRequestT)
@@ -271,6 +275,9 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 }
 
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
+
+	writeKey := "camunda"
+
 	//var err error
 	//writeKey, _, ok := r.BasicAuth()
 	//sourceID := gateway.getSourceIDForWriteKey(writeKey)
@@ -278,7 +285,6 @@ func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	//	println("Basic auth failed")
 	//}
 
-	writeKey := "camunda"
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
 		logger.Error("Error getting payload from request with source: " + writeKey)
