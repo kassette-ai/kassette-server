@@ -26,6 +26,7 @@ type ActivitiInstanceSql struct {
 	Actinst_end_time_       sql.NullTime   `json:"actinst_end_time_"`
 	Actinst_duration        sql.NullInt32  `json:"actinst_duration_"`
 	Actinst_act_inst_state_ sql.NullString `json:"actinst_act_inst_state_"`
+	Procinst_business_key_  sql.NullString `json:"procinst_business_key_"`
 	Procdef_name_           sql.NullString `json:"procdef_name_"`
 	Detail_type_            sql.NullString `json:"detail_type_"`
 	Detail_var_type_        sql.NullString `json:"detail_var_type_"`
@@ -43,6 +44,7 @@ type ActivitiInstance struct {
 	Actinst_end_time_       string `json:"actinst_end_time_"`
 	Actinst_duration        int    `json:"actinst_duration_"`
 	Actinst_act_inst_state_ string `json:"actinst_act_inst_state_"`
+	Procinst_business_key_  string `json:"procinst_business_key_"`
 	Procdef_name_           string `json:"procdef_name_"`
 	Detail_type_            string `json:"detail_type_"`
 	Detail_var_type_        string `json:"detail_var_type_"`
@@ -170,6 +172,12 @@ func sql2strings(activitiInstanceSql ActivitiInstanceSql) ActivitiInstance {
 		activitiInstance.Actinst_act_inst_state_ = ""
 	}
 
+	if activitiInstanceSql.Procinst_business_key_.Valid {
+		activitiInstance.Procinst_business_key_ = activitiInstanceSql.Procinst_business_key_.String
+	} else {
+		activitiInstance.Procinst_business_key_ = ""
+	}
+
 	if activitiInstanceSql.Procdef_name_.Valid {
 		activitiInstance.Procdef_name_ = activitiInstanceSql.Procdef_name_.String
 	} else {
@@ -268,6 +276,7 @@ func main() {
 				"actinst.end_time_,"+
 				"actinst.duration_,"+
 				"actinst.act_inst_state_,"+
+				"procinst.business_key_,"+
 				"procdef.name_,"+
 				"detail.type_,"+
 				"detail.var_type_,"+
@@ -275,6 +284,7 @@ func main() {
 				"from act_hi_actinst as actinst "+
 				"left join act_re_procdef as procdef on actinst.proc_def_key_=procdef.key_ "+
 				"left join act_hi_detail as detail on actinst.execution_id_=detail.act_inst_id_ "+
+				"left join act_hi_procinst as procinst on actinst.proc_inst_id_=procinst.proc_inst_id_ "+
 				"where actinst.start_time_ > $1 "+
 				"and actinst.id_ not in ($2) "+
 				"limit %s;", dbBatchSize)
@@ -299,6 +309,7 @@ func main() {
 					&activitiInstanceSql.Actinst_end_time_,
 					&activitiInstanceSql.Actinst_duration,
 					&activitiInstanceSql.Actinst_act_inst_state_,
+					&activitiInstanceSql.Procinst_business_key_,
 					&activitiInstanceSql.Procdef_name_,
 					&activitiInstanceSql.Detail_type_,
 					&activitiInstanceSql.Detail_var_type_,
