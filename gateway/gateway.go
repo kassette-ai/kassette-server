@@ -252,7 +252,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 }
 
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
-	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
+	payload, writeKey, err := gateway.GetPayloadAndWriteKey(c.Request)
 	if err != nil {
 		logger.Error("Error getting payload and write key")
 		return
@@ -274,7 +274,7 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	c.JSON(200, gin.H{"status": "ack"})
 }
 
-func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
+func (gateway *HandleT) GetPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
 
 	writeKey := "camunda"
 
@@ -302,7 +302,7 @@ func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
 	payload, err := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 	if err != nil {
-		logger.Error(fmt.Sprint(
+		logger.Error(fmt.Sprintf(
 			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
 			r.Header.Get("Content-Length"),
 			string(payload)),
@@ -599,7 +599,7 @@ func (gateway *HandleT) getJobDataFromRequest(req *webRequestT) (jobData *jobFro
 	}
 	marshalledParams, err := json.Marshal(params)
 	if err != nil {
-		logger.Error(fmt.Sprint("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
+		logger.Error(fmt.Sprintf("[Gateway] Failed to marshal parameters map. Parameters: %+v", params))
 
 		marshalledParams = []byte(
 			`{"error": "kassette-server gateway failed to marshal params"}`,
@@ -731,8 +731,8 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			result := gjson.GetBytes(body, "batch")
 			newAnonymousID := uuid.New().String()
 			result.ForEach(func(_, _ gjson.Result) bool {
-				if !gjson.GetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index)).Exists() {
-					body, _ = sjson.SetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index), newAnonymousID)
+				if !gjson.GetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index)).Exists() {
+					body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
 				}
 				index++
 				return true // keep iterating
@@ -745,7 +745,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 
 			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
 			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
-			events = append(events, fmt.Sprint("%s", body))
+			events = append(events, fmt.Sprintf("%s", body))
 
 			id := uuid.New()
 			//Should be function of body

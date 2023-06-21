@@ -1,40 +1,37 @@
-package gateway
+package gateway_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	. "kassette.ai/kassette-server/gateway"
 )
 
-// Create mocks to initialize gateway
-type testContext struct {
-	// create mocks for gateway initializers
+var _ = Describe("Gateway", func() {
 
-}
-
-func initGW() *testContext {
-	// initialize gateway
 	Init()
-	return &testContext{}
-}
-
-var _ = Describe("Gateway Enterprise", func() {
-	initGW()
 
 	var (
-		c       *testContext
+
+		//c       *testContext
 		gateway *HandleT
 	)
 
-	BeforeEach(func() {
-		c = &testContext{}
+	BeforeEach(func(ctx SpecContext) {
+		//c = &testContext{}
 		//c.Setup()
 		gateway = &HandleT{}
 	})
 
-	It("should not accept invalid JSON", func() {
-		// Create mock request
-		// Pass to gateway.getPayloadAndWriteKey(c)
-		// Expect error
-		gateway.getPayloadAndWriteKey(nil)
+	When("the payload is JSON", func() {
+
+		It("should not accept invalid JSON", func() {
+			// Create mock request
+			// Pass to gateway.getPayloadAndWriteKey(c)
+			// Expect error
+			_, _, err := gateway.GetPayloadAndWriteKey(nil)
+			Expect(err).To(MatchError("Invalid JSON"))
+		})
 	})
 
 })
