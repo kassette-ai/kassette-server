@@ -4,19 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/spf13/viper"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"io"
-	"kassette.ai/kassette-server/backendconfig"
-	"kassette.ai/kassette-server/errors"
-	"kassette.ai/kassette-server/jobs"
-	"kassette.ai/kassette-server/misc"
-	"kassette.ai/kassette-server/response"
-	"kassette.ai/kassette-server/utils"
-	"kassette.ai/kassette-server/utils/logger"
 	"log"
 	"net/http"
 	"regexp"
@@ -24,6 +12,19 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/spf13/viper"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+	"kassette.ai/kassette-server/backendconfig"
+	"kassette.ai/kassette-server/errors"
+	jobsdb "kassette.ai/kassette-server/jobs"
+	"kassette.ai/kassette-server/misc"
+	"kassette.ai/kassette-server/response"
+	"kassette.ai/kassette-server/utils"
+	"kassette.ai/kassette-server/utils/logger"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -304,6 +305,8 @@ func (gateway *HandleT) GetPayloadFromRequest(r *http.Request) ([]byte, error) {
 
 	println("Payload: ", string(payload))
 	if err != nil || !json.Valid(payload) {
+		println("error ->", err)
+		println("payload ->", payload)
 		logger.Error(fmt.Sprintf(
 			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
 			r.Header.Get("Content-Length"),
