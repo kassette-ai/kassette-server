@@ -235,7 +235,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 			misc.Assert(previousFailedJobID == job.JobID)
 		}
 
-		//We can execute thoe job
+		//We can execute the job
 		for attempts = 0; attempts < ser; attempts++ {
 			logger.Info(fmt.Sprintf("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser))
 
