@@ -285,23 +285,25 @@ func (gateway *HandleT) GetPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	//	println("Basic auth failed")
 	//}
 
-	payload, err := gateway.getPayloadFromRequest(r)
+	payload, err := gateway.GetPayloadFromRequest(r)
 	if err != nil {
 		logger.Error("Error getting payload from request with source: " + writeKey)
-
 		return []byte{}, writeKey, err
 	}
 	return payload, writeKey, err
 }
 
-func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
+func (gateway *HandleT) GetPayloadFromRequest(r *http.Request) ([]byte, error) {
 	if r.Body == nil {
 		return []byte{}, errors.New(response.RequestBodyNil)
 	}
 
 	payload, err := io.ReadAll(r.Body)
+
 	_ = r.Body.Close()
-	if err != nil {
+
+	println("Payload: ", string(payload))
+	if err != nil || !json.Valid(payload) {
 		logger.Error(fmt.Sprintf(
 			"Error reading request body, 'Content-Length': %s, partial payload:\n\t%s\n",
 			r.Header.Get("Content-Length"),
@@ -309,6 +311,7 @@ func (gateway *HandleT) getPayloadFromRequest(r *http.Request) ([]byte, error) {
 		)
 		return payload, errors.New(response.RequestBodyReadFailed)
 	}
+	println("Returning payload: ", string(payload))
 	return payload, nil
 }
 
