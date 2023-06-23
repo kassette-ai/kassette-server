@@ -3,13 +3,11 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/utils/logger"
 
 	"hash/fnv"
-	"kassette.ai/kassette-server/integrations"
-	jobsdb "kassette.ai/kassette-server/jobs"
-	"kassette.ai/kassette-server/misc"
 	"log"
 	"math"
 	"math/rand"
@@ -18,6 +16,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"kassette.ai/kassette-server/integrations"
+	jobsdb "kassette.ai/kassette-server/jobs"
+	"kassette.ai/kassette-server/misc"
 )
 
 type HandleT struct {
@@ -193,7 +195,8 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 		postInfo := integrations.GetPostInfo(job.EventPayload)
 		userID := postInfo.UserID
 		misc.Assert(userID != "")
-
+		requestMethod, ok := postInfo.RequestConfig["requestMethod"].(string)
+		misc.Assert(ok)
 		//If sink is not enabled mark all jobs as waiting
 		if !rt.isEnabled {
 
@@ -239,37 +242,48 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 		for attempts = 0; attempts < ser; attempts++ {
 			logger.Info(fmt.Sprintf("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser))
 
-			respStatusCode, respStatus, respBody = rt.netHandle.sendPost(job.EventPayload)
+			if requestMethod == "POST" {
+				respStatusCode, respStatus, respBody = rt.netHandle.sendPost(job.EventPayload)
 
-			if useTestSink {
-				//Internal test. No reason to sleep
-				break
-			}
-			if respStatusCode != http.StatusOK {
-				//400 series error are client errors. Can't continue
-				if respStatusCode >= http.StatusBadRequest && respStatusCode <= http.StatusUnavailableForLegalReasons {
+				if useTestSink {
+					//Internal test. No reason to sleep
 					break
 				}
-				//Wait before the next retry
-				worker.sleepTime = 2*worker.sleepTime + 1 //+1 handles 0 sleepTime
-				if worker.sleepTime > maxSleep {
-					worker.sleepTime = maxSleep
+
+				if respStatusCode != http.StatusOK {
+					//400 series error are client errors. Can't continue
+					if respStatusCode >= http.StatusBadRequest && respStatusCode <= http.StatusUnavailableForLegalReasons {
+						break
+					}
+
+					//Wait before the next retry
+					worker.sleepTime = 2*worker.sleepTime + 1 //+1 handles 0 sleepTime
+					if worker.sleepTime > maxSleep {
+						worker.sleepTime = maxSleep
+					}
+					logger.Info(fmt.Sprint("%v Router :: worker %v sleeping for  %v ",
+						rt.destID, worker.workerID, worker.sleepTime))
+					time.Sleep(worker.sleepTime * time.Second)
+					continue
+				} else {
+					atomic.AddUint64(&rt.successCount, 1)
+					//Divide the sleep
+					worker.sleepTime = worker.sleepTime / 2
+					if worker.sleepTime < minSleep {
+						worker.sleepTime = minSleep
+					}
+					log.Printf("%v Router :: sleep for worker %v decreased to %v",
+						rt.destID, worker.workerID, worker.sleepTime)
+					break
 				}
-				logger.Info(fmt.Sprint("%v Router :: worker %v sleeping for  %v ",
-					rt.destID, worker.workerID, worker.sleepTime))
-				time.Sleep(worker.sleepTime * time.Second)
-				continue
+			} else if requestMethod == "WAREHOUSE" {
+				logger.Info("Using Warehouse")
+				break
 			} else {
-				atomic.AddUint64(&rt.successCount, 1)
-				//Divide the sleep
-				worker.sleepTime = worker.sleepTime / 2
-				if worker.sleepTime < minSleep {
-					worker.sleepTime = minSleep
-				}
-				log.Printf("%v Router :: sleep for worker %v decreased to %v",
-					rt.destID, worker.workerID, worker.sleepTime)
+				logger.Fatal("RequestMethod " + requestMethod + " is not defined")
 				break
 			}
+
 		}
 
 		status := jobsdb.JobStatusT{
