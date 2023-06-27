@@ -189,6 +189,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 	for {
 		job := <-worker.channel
 		var respStatusCode, attempts int
+		var warehouseSave bool
 		var respStatus string
 		var respBody string
 
@@ -280,7 +281,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				}
 			} else if requestMethod == "WAREHOUSE" {
 				logger.Info("Using Warehouse")
-				rt.warehouseDB.WriteWarehouse(job.EventPayload)
+				warehouseSave = rt.warehouseDB.WriteWarehouse(job.EventPayload)
 				break
 			} else {
 				logger.Fatal("RequestMethod " + requestMethod + " is not defined")
@@ -298,12 +299,17 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 			ErrorResponse: json.RawMessage(respBody),
 		}
 
-		if respStatusCode == http.StatusOK {
+		if respStatusCode == http.StatusOK && requestMethod == "REST" {
 			//#JobOrder (see other #JobOrder comment)
 
 			status.AttemptNum = job.LastJobStatus.AttemptNum
 			status.JobState = jobsdb.SucceededState
 			log.Printf("%v Router :: sending success status to response", rt.destID)
+			rt.responseQ <- jobResponseT{status: &status, worker: worker, userID: userID}
+		} else if requestMethod == "WAREHOUSE" && warehouseSave {
+			status.AttemptNum = job.LastJobStatus.AttemptNum
+			status.JobState = jobsdb.SucceededState
+			log.Printf("%v Router :: warehouse sending success status to response", rt.destID)
 			rt.responseQ <- jobResponseT{status: &status, worker: worker, userID: userID}
 		} else {
 			// the job failed

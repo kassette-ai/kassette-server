@@ -14,7 +14,7 @@ type HandleT struct {
 	dbHandle *sql.DB
 }
 
-func (cd *HandleT) WriteWarehouse(jsonData []byte) {
+func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 
 	parsedJSON := gjson.ParseBytes(jsonData)
 	log.Printf("event log message: JSON parseddd,  %s", parsedJSON)
@@ -32,9 +32,10 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) {
 			"($1, $2, $3, $4, $5, $6)", activitiInstanceId, activitiTaskName, activitiCase, startActivities, endActivities, eventdata)
 		if err != nil {
 			log.Println("Failed to insert data:", err)
+			return false
 		}
 	}
-
+	return true
 }
 
 func (cd *HandleT) Init() {
