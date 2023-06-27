@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "github.com/lib/pq"
 	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
@@ -26,6 +27,7 @@ type HandleT struct {
 	requestQ              chan *jobsdb.JobT
 	responseQ             chan jobResponseT
 	jobsDB                *jobsdb.HandleT
+	warehouseDB           integrations.HandleT
 	netHandle             *NetHandleT
 	destID                string
 	workers               []*workerT
@@ -81,11 +83,11 @@ type jobResponseT struct {
 	userID string
 }
 
-func (rt *HandleT) Setup(jobsDB *jobsdb.HandleT, destID string) {
+func (rt *HandleT) Setup(jobsDB *jobsdb.HandleT, destID string, warehouse integrations.HandleT) {
 
 	rt.jobsDB = jobsDB
 	rt.destID = destID
-
+	rt.warehouseDB = warehouse //&integrations.HandleT{}
 	rt.requestQ = make(chan *jobsdb.JobT, jobQueryBatchSize)
 	rt.responseQ = make(chan jobResponseT, jobQueryBatchSize)
 	rt.toClearFailJobIDMap = make(map[int][]string)
@@ -278,6 +280,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				}
 			} else if requestMethod == "WAREHOUSE" {
 				logger.Info("Using Warehouse")
+				rt.warehouseDB.WriteWarehouse(job.EventPayload)
 				break
 			} else {
 				logger.Fatal("RequestMethod " + requestMethod + " is not defined")

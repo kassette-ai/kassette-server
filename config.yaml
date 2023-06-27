@@ -32,6 +32,14 @@ router:
   maxFailedCountForJob: 10
   testSinkURL: http://localhost:8080/testSink
 
+warehouse:
+  host: localhost
+  user: kassette_user
+  name: warehouse
+  password: password
+  port: 5432
+  ssl_mode: disable
+
 logLevel: INFO
 serverPort: 8088
 

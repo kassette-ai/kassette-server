@@ -3,10 +3,11 @@ package integrations
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+
 	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/misc"
-	"strings"
 )
 
 var (
