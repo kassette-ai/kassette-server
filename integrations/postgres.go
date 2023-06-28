@@ -27,7 +27,7 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 		endActivities := payload.Get("actinst_end_time_").Time()
 		eventdata := payload.String()
 		// log.Printf("results: %s %s %s %s %s %s", activitiInstanceId, activitiTaskName, activitiCase, startActivities, endActivities, eventdata)
-		_, err := cd.dbHandle.Exec("INSERT INTO eventlog (activiti_instance_id, activiti_task_name,	"+
+		_, err := cd.dbHandle.Exec("INSERT INTO camunda_eventlog (activiti_instance_id, activiti_task_name,	"+
 			"activiti_case, start_activities, end_activities, eventdata ) VALUES "+
 			"($1, $2, $3, $4, $5, $6)", activitiInstanceId, activitiTaskName, activitiCase, startActivities, endActivities, eventdata)
 		if err != nil {
@@ -56,6 +56,9 @@ func (cd *HandleT) Setup() {
 		log.Print("setup connection to to Warehouse DB")
 	}
 
+	cd.dbHandle.SetMaxIdleConns(5) // Set the maximum number of idle connections
+	cd.dbHandle.SetMaxOpenConns(20)
+
 	cd.createDestTable()
 
 }
@@ -75,7 +78,7 @@ func (cd *HandleT) createDestTable() {
 	var err error
 
 	sqlStatement := fmt.Sprintf(
-		`CREATE TABLE IF NOT EXISTS eventlog (
+		`CREATE TABLE IF NOT EXISTS camunda_eventlog (
 			id SERIAL PRIMARY KEY,
 			activiti_instance_id VARCHAR,
 			activiti_task_name VARCHAR,
