@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"time"
+
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/gateway"
+	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/processor"
 	"kassette.ai/kassette-server/router"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
-	"log"
-	"time"
 )
 
 var (
@@ -55,20 +57,23 @@ func main() {
 	var configDB backendconfig.HandleT
 	configDB.Init()
 
+	var warehouseDB integrations.HandleT
+	warehouseDB.Init()
+
 	routerDB.Setup(false, "rt", routerDBRetention, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false)
 
 	var processor processor.HandleT
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
 
-	go monitorDestRouters(&routerDB, &batchRouterDB)
+	go monitorDestRouters(&routerDB, &batchRouterDB, warehouseDB)
 
 	var gateway gateway.HandleT
 	gateway.Setup(&gatewayDB, &configDB)
 
 }
 
-func monitorDestRouters(routerDB, batchRouterDB *jobsdb.HandleT) {
+func monitorDestRouters(routerDB, batchRouterDB *jobsdb.HandleT, warehouseDB integrations.HandleT) {
 	ch := make(chan utils.DataEvent)
 	backendconfig.Subscribe(ch)
 	dstToRouter := make(map[string]*router.HandleT)
@@ -86,9 +91,9 @@ func monitorDestRouters(routerDB, batchRouterDB *jobsdb.HandleT) {
 
 						rt, ok := dstToRouter[destination.DestinationDefinition.Name]
 						if !ok {
-							logger.Info(fmt.Sprintf("Starting a new Destination", destination.DestinationDefinition.Name))
+							logger.Info(fmt.Sprintf("Starting a new Destination", destination.DestinationDefinition.Name, warehouseDB))
 							var router router.HandleT
-							router.Setup(routerDB, destination.DestinationDefinition.Name)
+							router.Setup(routerDB, destination.DestinationDefinition.Name, warehouseDB)
 							dstToRouter[destination.DestinationDefinition.Name] = &router
 						} else {
 							rt.Enable()

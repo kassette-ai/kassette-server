@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"kassette.ai/kassette-server/integrations"
-	"kassette.ai/kassette-server/misc"
 	"log"
 	"net/http"
+
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/misc"
 )
 
 func (network *NetHandleT) sendPost(jsonData []byte) (int, string, string) {
