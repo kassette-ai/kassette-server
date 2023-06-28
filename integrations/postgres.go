@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/tidwall/gjson"
@@ -23,13 +24,38 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 		activitiInstanceId := payload.Get("actinst_id_").String()
 		activitiTaskName := payload.Get("actinst_act_name_").String()
 		activitiCase := payload.Get("procinst_business_key_").String()
-		startActivities := payload.Get("actinst_start_time_").Time()
-		endActivities := payload.Get("actinst_end_time_").Time()
+		startActivities := payload.Get("actinst_start_time_").String()
+		//log.Printf("Parsing start activities: %s\n", startActivities)
+		var startActivitiesTs *time.Time
+		if startActivities == "" {
+			startActivitiesTs = nil
+		} else {
+			parsedTime, errts := time.Parse("2006-01-02 15:04:05", startActivities)
+			if errts != nil {
+				log.Fatal(errts)
+			}
+			startActivitiesTs = &parsedTime
+		}
+
+		endActivities := payload.Get("actinst_end_time_").String()
+		//log.Printf("Parsing end activities: %s\n", endActivities)
+
+		var endActivitiesTs *time.Time
+		if endActivities == "" {
+			endActivitiesTs = nil
+		} else {
+			parsedTime, errts := time.Parse("2006-01-02 15:04:05", endActivities)
+			if errts != nil {
+				log.Fatal(errts)
+			}
+			endActivitiesTs = &parsedTime
+		}
+
 		eventdata := payload.String()
-		// log.Printf("results: %s %s %s %s %s %s", activitiInstanceId, activitiTaskName, activitiCase, startActivities, endActivities, eventdata)
+		log.Printf("results: %s %s %s %s %s %s", activitiInstanceId, activitiTaskName, activitiCase, startActivitiesTs, endActivitiesTs, eventdata)
 		_, err := cd.dbHandle.Exec("INSERT INTO camunda_eventlog (activiti_instance_id, activiti_task_name,	"+
 			"activiti_case, start_activities, end_activities, eventdata ) VALUES "+
-			"($1, $2, $3, $4, $5, $6)", activitiInstanceId, activitiTaskName, activitiCase, startActivities, endActivities, eventdata)
+			"($1, $2, $3, $4, $5, $6)", activitiInstanceId, activitiTaskName, activitiCase, startActivitiesTs, endActivitiesTs, eventdata)
 		if err != nil {
 			log.Println("Failed to insert data:", err)
 			return false
@@ -83,8 +109,8 @@ func (cd *HandleT) createDestTable() {
 			activiti_instance_id VARCHAR,
 			activiti_task_name VARCHAR,
 			activiti_case VARCHAR,
-			start_activities TIMESTAMP,
-			end_activities TIMESTAMP,
+			start_activities TIMESTAMP NULL,
+			end_activities TIMESTAMP NULL,
 			eventdata JSONB NOT NULL);`)
 
 	_, err = cd.dbHandle.Exec(sqlStatement)
