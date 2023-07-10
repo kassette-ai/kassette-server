@@ -168,7 +168,7 @@ func main() {
 	lastTimestamp := time.Now().Add(-2 * time.Hour) //start ingesting data 2 hours back after restart
 
 	batchSubmit := make([]map[string]interface{}, 0)
-	kassetteBatchSize := viper.GetInt("kassette-server.batchSize")
+	kassetteBatchSize := viper.GetInt("kassette-server.batch_size")
 	//read tables settings into Map
 	var trackTables map[string]map[string]string
 	var trackTablesTs map[string]map[string]interface{}
