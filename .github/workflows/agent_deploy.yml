@@ -14,5 +14,5 @@ jobs:
     - name: add metaops helm repo
       run: helm repo add metaops https://metaops-solutions.github.io/helm-charts
     - name: install release
-      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-agent metaops/kassette-agent --set config.database.user=camundadiy,config.database.password=camundadiy,config.database.host=postgres-postgresql-hl.camunda-diy.svc,config.database.name=workflow,config.kassette-server.url='http://kassette-server.kassette-dev.svc/extract
+      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-agent metaops/kassette-agent --set config.database.user=camundadiy,config.database.password=camundadiy,config.database.host=postgres-postgresql-hl.camunda-diy.svc,config.database.name=workflow,config.kassette-server.url='http://kassette-server.kassette-dev.svc/extract'
 
