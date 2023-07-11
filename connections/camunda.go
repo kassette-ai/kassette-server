@@ -18,7 +18,7 @@ import (
 type TableRow map[string]interface{}
 
 type Payload struct {
-	Batch []map[string]interface{}
+	Batch []map[string]interface{} `json:"batch"`
 }
 
 func GetConnectionString() string {
