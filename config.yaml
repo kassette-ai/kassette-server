@@ -1,6 +1,6 @@
 ---
 database:
-  host: localhost
+  host: postgres
   user: kassette_user
   name: kassette
   password: password
@@ -33,7 +33,7 @@ router:
   testSinkURL: http://localhost:8080/testSink
 
 warehouse:
-  host: localhost
+  host: postgres-warehouse
   user: kassette_user
   name: warehouse
   password: password

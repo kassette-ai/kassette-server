@@ -22,6 +22,14 @@ helm install kassette-server metaops/kassette-server
 
 ```
 
+### Run locally using docker-compose
+This will create 2 Postgres Databaases: kassette and warehouse + builds and runs kassette-server
+kassette-server will run and listen on port 8088
+```
+docker-compose up
+```
+
+
 ### Configuration
 Configuration is done in app but the application can be scaled
 
