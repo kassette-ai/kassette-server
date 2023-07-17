@@ -20,7 +20,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: warehouse
 
-  kassette-server-app:
+  kassette-server:
     image: golang:1.20.4
     command: bash -c "cd /opt/kassette-ai/ && find . -name go.sum -o -name go.mod -delete && rm -f kassette-server && go mod init kassette.ai/kassette-server && go mod tidy && go build && chmod 0755 kassette-server && ./kassette-server"
     depends_on:

@@ -1,0 +1,39 @@
+{
+    "id": "1",
+    "config": {},
+    "enabled": true,
+    "writeKey": "write_key",
+    "sourceName": "Camunda-test",
+    "destinations": [
+      {
+        "ID": "1",
+        "Name": "Camunda-test",
+        "Config": null,
+        "Enabled": true,
+        "RevisionID": "",
+        "WorkspaceID": "",
+        "Transformations": {
+          "ID": "1",
+          "Config": {},
+          "VersionID": "1"
+        },
+        "IsProcessorEnabled": true,
+        "DestinationDefinition": {
+          "ID": "1",
+          "Name": "power_bi",
+          "Config": {
+            "endpoint": "https://api.powerbi.com/beta/c4ae8b92-c69e-4f24-a16b-9a034ffa7e79/datasets/5998ed2b-b43c-4281-bdd5-1bc851b2697a/rows?experience=power-bi&key=kQ3YW5PG7ws1fy%2FUU3aau2P8wdeYxhB6yzBfbg6EtJ5WUrix6xgJl%2BRwnzTqooDAncwnc9poWOUijC1CnBue8g%3D%3D",
+            "requestFormat": "ARRAY",
+            "requestMethod": "powerbi"
+          },
+          "DisplayName": "Power BI",
+          "ResponseRules": null
+        }
+      }
+    ],
+    "sourceDefinition": {
+      "category": "Workflow",
+      "sourceId": "1",
+      "sourceName": "Camunda"
+    }
+  }
