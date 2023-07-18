@@ -23,3 +23,6 @@ go.work
 .idea/misc.xml
 .idea/modules.xml
 .idea/vcs.xml
+
+go.mod
+go.sum
