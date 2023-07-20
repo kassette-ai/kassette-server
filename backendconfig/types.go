@@ -10,6 +10,16 @@ type SourceT struct {
 	WriteKey         string                 `json:"writeKey"`
 }
 
+type TableConfig struct {
+	Agent  string              `json:"kassette_data_agent"`
+	Type   string              `json:"kassette_data_type"`
+	Config []map[string]string `json:"config"`
+}
+
+type SourceAdvancedConfig struct {
+	Source []TableConfig `json:"source_config"`
+}
+
 type DgSourceTrackingPlanConfigT struct {
 	SourceId            string                            `json:"sourceId"`
 	SourceConfigVersion int                               `json:"version"`

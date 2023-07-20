@@ -65,6 +65,24 @@ func (cd *HandleT) Update(t SourceT, write_key string) {
 	}
 }
 
+func (cd *HandleT) UpdateAdvanced(t SourceAdvancedConfig, write_key string) {
+
+	jsonData, err := json.Marshal(t)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	sqlStatement := fmt.Sprintf(`UPDATE source_config set advanced = '%s' where write_key = '%s';`, jsonData, write_key)
+
+	_, err = cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Failed to update advanced in source_config table %s", err))
+	}
+
+}
+
 func WaitForConfig() {
 	for {
 		if initialized {
@@ -159,6 +177,7 @@ func (cd *HandleT) createConfigTable() {
 		`CREATE TABLE IF NOT EXISTS source_config (
 		id BIGSERIAL PRIMARY KEY,
 		source JSONB NOT NULL,
+		advanced JSONB,
 		write_key VARCHAR(255) NOT NULL);`)
 
 	_, err = cd.dbHandle.Exec(sqlStatement)
