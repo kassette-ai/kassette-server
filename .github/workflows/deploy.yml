@@ -6,6 +6,16 @@ jobs:
   deployment:
     runs-on: self-hosted  
     steps:
+    - uses: actions/checkout@v3
+    - name: Set env
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+    - name: create latest tag if its the main branch
+      if:  ${{ env.RELEASE_VERSION == 'main' }}
+      run: echo "DOCKER_TAG=latest" >> $GITHUB_ENV  
+
+    - name: create git tag if its the build uses tag
+      if:  ${{ env.RELEASE_VERSION != 'main' }}
+      run: echo "DOCKER_TAG=${{ env.RELEASE_VERSION }}" >> $GITHUB_ENV  
     - name: 'Deploy'
       uses: 'azure/setup-helm@v3'
       with: 
@@ -14,5 +24,5 @@ jobs:
     - name: add metaops helm repo
       run: helm repo add metaops https://metaops-solutions.github.io/helm-charts
     - name: install release
-      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server
+      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server --set image.tag=$DOCKER_TAG
 

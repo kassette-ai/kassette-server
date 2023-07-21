@@ -7,7 +7,7 @@ on:
     branches: [ "main", "andrey" ]
 
 env:
-  SERVER_IMAGE_NAME: metaops/kassette-server
+  IMAGE_NAME: metaops/kassette-server
 
 
 jobs:
