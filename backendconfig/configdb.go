@@ -134,6 +134,30 @@ func (cd *HandleT) Setup() {
 	cd.createConfigTable()
 }
 
+func (cd *HandleT) GetAllAdvancedConfigs() map[string]interface{} {
+	rows, err := cd.dbHandle.Query("SELECT advanced FROM source_config;")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var jsonData []byte
+	var data map[string]interface{}
+
+	for rows.Next() {
+		err := rows.Scan(&jsonData)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = json.Unmarshal(jsonData, &data)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+	}
+	return data
+
+}
+
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
 
 	sqlStatement := fmt.Sprintf(`SELECT id, source, write_key FROM source_config`)

@@ -57,8 +57,10 @@ func main() {
 	var configDB backendconfig.HandleT
 	configDB.Init()
 
+	advancedConfig := configDB.GetAllAdvancedConfigs()
+
 	var warehouseDB integrations.HandleT
-	warehouseDB.Init()
+	warehouseDB.Init(advancedConfig) //has no conditions, creates all tabletypes availaible in advanced field of the src_config
 
 	routerDB.Setup(false, "rt", routerDBRetention, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false)

@@ -221,7 +221,6 @@ func (gateway *HandleT) startWebHandler() {
 	})
 
 	r.POST("/configtable", func(c *gin.Context) {
-		log.Print("Starting config")
 		var config backendconfig.SourceAdvancedConfig
 		err := c.BindJSON(&config)
 		if err != nil {
@@ -230,8 +229,11 @@ func (gateway *HandleT) startWebHandler() {
 			})
 			return
 		}
-		log.Print(config)
 		gateway.configDB.UpdateAdvanced(config, "write_key")
+		// need to add reinitialisation
+		//var warehouseDB integrations.HandleT
+		//warehouseDB.Init(config)
+
 	})
 
 	serverPort := viper.GetString("serverPort")

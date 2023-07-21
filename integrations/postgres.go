@@ -2,13 +2,13 @@ package integrations
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
-	"time"
+	"regexp"
 
+	"github.com/lib/pq"
 	"github.com/spf13/viper"
-	"github.com/tidwall/gjson"
-	"kassette.ai/kassette-server/utils/logger"
 )
 
 type HandleT struct {
@@ -17,58 +17,91 @@ type HandleT struct {
 
 func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 
-	parsedJSON := gjson.ParseBytes(jsonData)
+	parsedJSON := make(map[string]interface{})
+	// Unmarshal the JSON data into the map
+	err := json.Unmarshal(jsonData, &parsedJSON)
+	if err != nil {
+		log.Fatal("Error decoding JSON:")
+		return false
+	}
+
+	//parsedJSON := gjson.ParseBytes(jsonData)
 	log.Printf("event log message: JSON parseddd,  %s", parsedJSON)
-	payloads := parsedJSON.Get("payload").Array()
+	payloads, ok := parsedJSON["payload"].([]interface{})
+	if !ok {
+		log.Fatal("Error: 'payload' is not an array")
+		return false
+	}
+
 	for _, payload := range payloads {
-		activitiInstanceId := payload.Get("actinst_id_").String()
-		activitiTaskName := payload.Get("actinst_act_name_").String()
-		activitiCase := payload.Get("procinst_business_key_").String()
-		startActivities := payload.Get("actinst_start_time_").String()
-		//log.Printf("Parsing start activities: %s\n", startActivities)
-		var startActivitiesTs *time.Time
-		if startActivities == "" {
-			startActivitiesTs = nil
-		} else {
-			parsedTime, errts := time.Parse("2006-01-02 15:04:05", startActivities)
-			if errts != nil {
-				log.Fatal(errts)
-			}
-			startActivitiesTs = &parsedTime
+		data, ok := payload.(map[string]interface{})
+		if !ok {
+			log.Fatal("Error: 'payload' is not a map")
+			return false
 		}
 
-		endActivities := payload.Get("actinst_end_time_").String()
-		//log.Printf("Parsing end activities: %s\n", endActivities)
-
-		var endActivitiesTs *time.Time
-		if endActivities == "" {
-			endActivitiesTs = nil
-		} else {
-			parsedTime, errts := time.Parse("2006-01-02 15:04:05", endActivities)
-			if errts != nil {
-				log.Fatal(errts)
+		kassette_data_type := data["kassette_data_type"]   //payload.Get("kassette_data_type").String()
+		kassette_data_agent := data["kassette_data_agent"] //payload.Get("kassette_data_agent").String()
+		// Define the regular expression pattern
+		pattern := regexp.MustCompile(`^kassette_data_`)
+		// Create a map to hold the JSON data
+		//		data := make(map[string]string)
+		// Unmarshal the JSON data into the map
+		// err := json.Unmarshal(jsonData, &data)
+		// if err != nil {
+		// 	log.Fatal(fmt.Printf("Type of num: %T\n", payload))
+		// 	return false
+		// }
+		//log.Fatal(fmt.Printf("Type of num: %T\n", data))
+		// Create a slice to store the matching keys
+		matchingKeys := make([]string, 0)
+		matchingValues := make([]string, 0)
+		// Iterate over the map and check if the key matches the pattern
+		for key, value := range data {
+			if !pattern.MatchString(key) {
+				if str, ok := value.(string); ok {
+					matchingKeys = append(matchingKeys, key)
+					matchingValues = append(matchingValues, str)
+				}
 			}
-			endActivitiesTs = &parsedTime
 		}
 
-		eventdata := payload.String()
-		log.Printf("results: %s %s %s %s %s %s", activitiInstanceId, activitiTaskName, activitiCase, startActivitiesTs, endActivitiesTs, eventdata)
-		_, err := cd.dbHandle.Exec("INSERT INTO camunda_eventlog (activiti_instance_id, activiti_task_name,	"+
-			"activiti_case, start_activities, end_activities, eventdata ) VALUES "+
-			"($1, $2, $3, $4, $5, $6)", activitiInstanceId, activitiTaskName, activitiCase, startActivitiesTs, endActivitiesTs, eventdata)
-		if err != nil {
-			log.Println("Failed to insert data:", err)
+		if kassette_data_agent == "camunda" {
+			query := fmt.Sprintf("INSERT INTO %s (", kassette_data_type)
+			for i, key := range matchingKeys {
+				query += pq.QuoteIdentifier(key)
+				if i < len(matchingKeys)-1 {
+					query += ","
+				}
+			}
+			query += ") VALUES ("
+			for i, value := range matchingValues {
+				query += "'" + value + "'"
+				if i < len(matchingValues)-1 {
+					query += ","
+				}
+			}
+			query += ")"
+
+			log.Printf(query)
+			_, err = cd.dbHandle.Exec(query)
+			if err != nil {
+				log.Fatal(err)
+				return false
+			}
+		} else {
+			log.Fatal(fmt.Sprintf("Unknown Data Agent: %s", kassette_data_agent))
 			return false
 		}
 	}
 	return true
 }
 
-func (cd *HandleT) Init() {
-	cd.Setup()
+func (cd *HandleT) Init(advancedConfig map[string]interface{}) {
+	cd.Setup(advancedConfig)
 }
 
-func (cd *HandleT) Setup() {
+func (cd *HandleT) Setup(advancedConfig map[string]interface{}) {
 
 	var err error
 
@@ -85,7 +118,7 @@ func (cd *HandleT) Setup() {
 	cd.dbHandle.SetMaxIdleConns(5) // Set the maximum number of idle connections
 	cd.dbHandle.SetMaxOpenConns(20)
 
-	cd.createDestTable()
+	cd.createDestTable(advancedConfig)
 
 }
 
@@ -99,24 +132,44 @@ func GetConnectionString() string {
 		viper.GetString("warehouse.name"))
 }
 
-func (cd *HandleT) createDestTable() {
-
-	var err error
-
-	sqlStatement := fmt.Sprintf(
-		`CREATE TABLE IF NOT EXISTS camunda_eventlog (
-			id SERIAL PRIMARY KEY,
-			activiti_instance_id VARCHAR,
-			activiti_task_name VARCHAR,
-			activiti_case VARCHAR,
-			start_activities TIMESTAMP NULL,
-			end_activities TIMESTAMP NULL,
-			eventdata JSONB NOT NULL);`)
-
-	_, err = cd.dbHandle.Exec(sqlStatement)
-
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to create eventlog table %s", err))
+func (cd *HandleT) createDestTable(advancedConfig map[string]interface{}) {
+	configs, ok := advancedConfig["source_config"].([]interface{})
+	if !ok {
+		log.Fatal("Error: 'source_config' is not an array")
 	}
 
+	for _, config := range configs {
+		data, ok := config.(map[string]interface{})
+		if !ok {
+			log.Print("Error: 'config' is not a map", data)
+		}
+		//log.Print(fmt.Sprintf("Table: %s, fields: %s", data["kassette_data_type"], data["config"]))
+		table_config, ok := data["config"].([]interface{})
+		if !ok {
+			log.Fatal("Error: 'data[config]' is not a array", data["config"])
+		}
+		query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", data["kassette_data_type"])
+		for i, value := range table_config {
+			aa, ok := value.(map[string]interface{})
+			if !ok {
+				log.Fatal("Error: 'aa' is not a map", aa)
+			}
+			for a, b := range aa {
+				bstr, ok := b.(string)
+				if !ok {
+					log.Fatal("Error: bstr is not a string: ", bstr)
+				}
+				query += a + " " + bstr
+			}
+			if i < len(table_config)-1 {
+				query += ", "
+			}
+		}
+		query += ");"
+		//log.Print(fmt.Sprintf("Create Table statements: %s", query))
+		_, err := cd.dbHandle.Exec(query)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
