@@ -4,7 +4,7 @@ on: workflow_dispatch
 
 
 env:
-  SERVER_IMAGE_NAME: metaops/kassette-server
+  IMAGE_NAME: metaops/kassette-server
 
 
 jobs:
@@ -13,6 +13,21 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Set env
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+    - name: Test
+      run: |
+        echo $RELEASE_VERSION
+        echo ${{ env.RELEASE_VERSION }}    
+
+    - name: create latest tag if its the main branch
+      if:  ${{ env.RELEASE_VERSION == 'main' }}
+      run: echo "DOCKER_TAG=latest" >> $GITHUB_ENV  
+
+    - name: create git tag if its the build uses tag
+      if:  ${{ env.RELEASE_VERSION != 'main' }}
+      run: echo "DOCKER_TAG=${{ env.RELEASE_VERSION }}" >> $GITHUB_ENV  
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
@@ -29,7 +44,7 @@ jobs:
       run: go mod init kassette.ai/kassette-server && go mod tidy && go build
 
     - name: Build docker image for kassete-server
-      run:  docker build . --file Dockerfile --tag ${{ env.SERVER_IMAGE_NAME }}:latest
+      run:  docker build . --file Dockerfile --tag ${{ env.IMAGE_NAME }}:${{ env.DOCKER_TAG }}
 
     - name: docker login
       if: github.event_name != 'pull_request'
@@ -37,6 +52,6 @@ jobs:
 
     - name: docker push server
       if: github.event_name != 'pull_request'
-      run: docker push ${{ env.SERVER_IMAGE_NAME }}:latest
+      run: docker push ${{ env.SERVER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}
 
 
