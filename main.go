@@ -56,11 +56,14 @@ func main() {
 
 	var configDB backendconfig.HandleT
 	configDB.Init()
-
-	advancedConfig := configDB.GetAllAdvancedConfigs()
-
 	var warehouseDB integrations.HandleT
-	warehouseDB.Init(advancedConfig) //has no conditions, creates all tabletypes availaible in advanced field of the src_config
+	warehouseDB.Init()
+	advancedConfig, ok := configDB.GetAllAdvancedConfigs()
+	if ok {
+		warehouseDB.CreateDestTable(advancedConfig) //has no conditions, creates all tabletypes availaible in advanced field of the src_config
+	} else {
+		log.Print("Skipping initialisation of WAREHOUSE")
+	}
 
 	routerDB.Setup(false, "rt", routerDBRetention, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false)

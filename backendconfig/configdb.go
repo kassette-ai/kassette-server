@@ -134,10 +134,10 @@ func (cd *HandleT) Setup() {
 	cd.createConfigTable()
 }
 
-func (cd *HandleT) GetAllAdvancedConfigs() map[string]interface{} {
+func (cd *HandleT) GetAllAdvancedConfigs() (map[string]interface{}, bool) {
 	rows, err := cd.dbHandle.Query("SELECT advanced FROM source_config;")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("No configuration present in the DB")
 	}
 	var jsonData []byte
 	var data map[string]interface{}
@@ -145,16 +145,18 @@ func (cd *HandleT) GetAllAdvancedConfigs() map[string]interface{} {
 	for rows.Next() {
 		err := rows.Scan(&jsonData)
 		if err != nil {
-			log.Fatal(err)
+			log.Print("No Data in rows")
+			return data, false
 		}
 
 		err = json.Unmarshal(jsonData, &data)
 		if err != nil {
-			log.Fatal(err)
+			log.Print("can not unmarshal")
+			return data, false
 		}
 
 	}
-	return data
+	return data, true
 
 }
 

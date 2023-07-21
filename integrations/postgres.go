@@ -101,11 +101,11 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 	return true
 }
 
-func (cd *HandleT) Init(advancedConfig map[string]interface{}) {
-	cd.Setup(advancedConfig)
+func (cd *HandleT) Init() {
+	cd.Setup()
 }
 
-func (cd *HandleT) Setup(advancedConfig map[string]interface{}) {
+func (cd *HandleT) Setup() {
 
 	var err error
 
@@ -121,9 +121,6 @@ func (cd *HandleT) Setup(advancedConfig map[string]interface{}) {
 
 	cd.dbHandle.SetMaxIdleConns(5) // Set the maximum number of idle connections
 	cd.dbHandle.SetMaxOpenConns(20)
-
-	cd.createDestTable(advancedConfig)
-
 }
 
 func GetConnectionString() string {
@@ -136,10 +133,11 @@ func GetConnectionString() string {
 		viper.GetString("warehouse.name"))
 }
 
-func (cd *HandleT) createDestTable(advancedConfig map[string]interface{}) {
+func (cd *HandleT) CreateDestTable(advancedConfig map[string]interface{}) {
 	configs, ok := advancedConfig["source_config"].([]interface{})
 	if !ok {
-		log.Fatal("Error: 'source_config' is not an array")
+		log.Print("Error: 'source_config' is not an array")
+		return
 	}
 
 	for _, config := range configs {

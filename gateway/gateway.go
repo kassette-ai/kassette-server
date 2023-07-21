@@ -232,10 +232,15 @@ func (gateway *HandleT) startWebHandler() {
 		}
 		gateway.configDB.UpdateAdvanced(config, "write_key") //hardcoded write_key
 		// reinitialisation
-		advancedConfig := gateway.configDB.GetAllAdvancedConfigs()
-		var warehouseDB integrations.HandleT
-		warehouseDB.Init(advancedConfig)
-		warehouseDB.Close()
+		advancedConfig, ok := gateway.configDB.GetAllAdvancedConfigs()
+		if ok {
+			var warehouseDB integrations.HandleT
+			warehouseDB.Init()
+			warehouseDB.CreateDestTable(advancedConfig)
+			warehouseDB.Close()
+		} else {
+			log.Print("Failed to pull advanced config")
+		}
 
 	})
 
