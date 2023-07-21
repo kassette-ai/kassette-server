@@ -4,7 +4,6 @@ on: workflow_dispatch
 
 
 env:
-  AGENT_IMAGE_NAME: metaops/kassette-agent
   SERVER_IMAGE_NAME: metaops/kassette-server
 
 
@@ -24,7 +23,7 @@ jobs:
       run: find . -name go.sum -o -name go.mod -delete
 
     - name: cleanup the build artefacts if any
-      run: rm -f kassette-server connections/kassete-agent
+      run: rm -f kassette-server
 
     - name: Build kassette-server
       run: go mod init kassette.ai/kassette-server && go mod tidy && go build

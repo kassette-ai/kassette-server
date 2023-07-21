@@ -22,7 +22,7 @@ services:
 
   kassette-server:
     image: golang:1.20.4
-    command: bash -c "cd /opt/kassette-ai/ && find . -name go.sum -o -name go.mod -delete && rm -f kassette-server && go mod init kassette.ai/kassette-server && go mod tidy && go build && chmod 0755 kassette-server && ./kassette-server"
+    command: /bin/sh -c "cd /opt/kassette-ai/ && find . -name go.sum -o -name go.mod -delete && rm -f kassette-server && go mod init kassette.ai/kassette-server && go mod tidy && go build -buildvcs=false && chmod 0755 kassette-server && ./kassette-server"
     depends_on:
       - postgres
       - postgres-warehouse
