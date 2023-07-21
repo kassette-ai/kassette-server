@@ -15,6 +15,10 @@ type HandleT struct {
 	dbHandle *sql.DB
 }
 
+func (cd *HandleT) Close() {
+	cd.dbHandle.Close()
+}
+
 func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 
 	parsedJSON := make(map[string]interface{})
@@ -26,7 +30,7 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 	}
 
 	//parsedJSON := gjson.ParseBytes(jsonData)
-	log.Printf("event log message: JSON parseddd,  %s", parsedJSON)
+	//log.Printf("event log message: JSON parseddd,  %s", parsedJSON)
 	payloads, ok := parsedJSON["payload"].([]interface{})
 	if !ok {
 		log.Fatal("Error: 'payload' is not an array")
@@ -83,7 +87,7 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 			}
 			query += ")"
 
-			log.Printf(query)
+			//log.Printf(query)
 			_, err = cd.dbHandle.Exec(query)
 			if err != nil {
 				log.Fatal(err)

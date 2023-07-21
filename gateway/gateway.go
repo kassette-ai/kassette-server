@@ -20,6 +20,7 @@ import (
 	"github.com/tidwall/sjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/errors"
+	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
@@ -229,10 +230,12 @@ func (gateway *HandleT) startWebHandler() {
 			})
 			return
 		}
-		gateway.configDB.UpdateAdvanced(config, "write_key")
-		// need to add reinitialisation
-		//var warehouseDB integrations.HandleT
-		//warehouseDB.Init(config)
+		gateway.configDB.UpdateAdvanced(config, "write_key") //hardcoded write_key
+		// reinitialisation
+		advancedConfig := gateway.configDB.GetAllAdvancedConfigs()
+		var warehouseDB integrations.HandleT
+		warehouseDB.Init(advancedConfig)
+		warehouseDB.Close()
 
 	})
 
