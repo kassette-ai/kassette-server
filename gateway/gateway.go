@@ -756,7 +756,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			jobWriteKeyMap[newJob.UUID] = writeKey
 		}
 
-		errorMessagesMap := gateway.jobsDB.Store(jobList)
+		errorMessagesMap, _ := gateway.jobsDB.Store(jobList)
 		for uuid, err := range errorMessagesMap {
 			jobIDReqMap[uuid].done <- err
 		}
