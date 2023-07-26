@@ -189,7 +189,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 	for {
 		job := <-worker.channel
 		var respStatusCode, attempts int
-		var warehouseSave bool
+		var submitStatus bool
 		var respStatus string
 		var respBody string
 
@@ -245,7 +245,7 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 		for attempts = 0; attempts < ser; attempts++ {
 			logger.Info(fmt.Sprintf("%v Router :: trying to send payload %v of %v", rt.destID, attempts, ser))
 
-			if requestMethod == "POST" {
+			if requestMethod == "POWERBI" {
 				respStatusCode, respStatus, respBody = rt.netHandle.sendPost(job.EventPayload)
 
 				if useTestSink {
@@ -281,8 +281,42 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				}
 			} else if requestMethod == "WAREHOUSE" {
 				logger.Info("Using Warehouse")
-				warehouseSave = rt.warehouseDB.WriteWarehouse(job.EventPayload)
+				submitStatus = rt.warehouseDB.WriteWarehouse(job.EventPayload)
 				break
+			} else if requestMethod == "S3" {
+				logger.Info("Using S3 backend")
+				var s3Config integrations.S3Config
+				s3Config.AccessKey, ok = postInfo.RequestConfig["accessKey"].(string)
+				if !ok {
+					log.Fatal("No configuration AccessKey provided for S3 destination")
+					break
+				}
+				s3Config.Bucket, ok = postInfo.RequestConfig["bucket"].(string)
+				if !ok {
+					log.Fatal("No configuration Bucket provided for S3 destination")
+					break
+				}
+				s3Config.Region, ok = postInfo.RequestConfig["region"].(string)
+				if !ok {
+					log.Fatal("No configuration Region provided for S3 destination")
+					break
+				}
+				s3Config.SecretKey, ok = postInfo.RequestConfig["secretKey"].(string)
+				if !ok {
+					log.Fatal("No configuration SecretKey provided for S3 destination")
+					break
+				}
+				//log.Printf("The config of S3 bucket: %s", s3Config)
+				upload := integrations.UploadToS3(s3Config, job.EventPayload)
+				if upload != nil {
+					log.Printf("Failed to save to S3, %s", upload)
+					submitStatus = true
+					break
+				} else {
+					submitStatus = false
+					break
+				}
+
 			} else {
 				logger.Fatal("RequestMethod " + requestMethod + " is not defined")
 				break
@@ -299,17 +333,17 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 			ErrorResponse: json.RawMessage(respBody),
 		}
 
-		if respStatusCode == http.StatusOK && requestMethod == "REST" {
+		if respStatusCode == http.StatusOK && requestMethod == "POWERBI" {
 			//#JobOrder (see other #JobOrder comment)
 
 			status.AttemptNum = job.LastJobStatus.AttemptNum
 			status.JobState = jobsdb.SucceededState
 			log.Printf("%v Router :: sending success status to response", rt.destID)
 			rt.responseQ <- jobResponseT{status: &status, worker: worker, userID: userID}
-		} else if requestMethod == "WAREHOUSE" && warehouseSave {
+		} else if (requestMethod == "WAREHOUSE" || requestMethod == "S3") && submitStatus {
 			status.AttemptNum = job.LastJobStatus.AttemptNum
 			status.JobState = jobsdb.SucceededState
-			log.Printf("%v Router :: warehouse sending success status to response", rt.destID)
+			log.Printf("%v Router :: %s sending success status to response", rt.destID, requestMethod)
 			rt.responseQ <- jobResponseT{status: &status, worker: worker, userID: userID}
 		} else {
 			// the job failed
@@ -473,7 +507,6 @@ func (rt *HandleT) generatorLoop() {
 }
 
 func (rt *HandleT) findWorker(job *jobsdb.JobT) *workerT {
-
 	postInfo := integrations.GetPostInfo(job.EventPayload)
 
 	var index int

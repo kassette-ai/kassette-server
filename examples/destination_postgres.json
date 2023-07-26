@@ -1,0 +1,8 @@
+{
+    "ID": "1",
+    "Name": "Postgres",
+    "Config": {
+      "requestMethod": "WAREHOUSE"
+    },
+    "DisplayName": "Postgres Database"
+  }
