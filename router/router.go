@@ -282,6 +282,10 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 			} else if requestMethod == "WAREHOUSE" {
 				logger.Info("Using Warehouse")
 				submitStatus = rt.warehouseDB.WriteWarehouse(job.EventPayload)
+				if submitStatus {
+					respStatus = "200 OK"
+					respStatusCode = 200
+				}
 				break
 			} else if requestMethod == "S3" {
 				logger.Info("Using S3 backend")
@@ -310,10 +314,12 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				upload := integrations.UploadToS3(s3Config, job.EventPayload)
 				if upload != nil {
 					log.Printf("Failed to save to S3, %s", upload)
-					submitStatus = true
+					submitStatus = false
 					break
 				} else {
-					submitStatus = false
+					submitStatus = true
+					respStatus = "200 OK"
+					respStatusCode = 200
 					break
 				}
 
