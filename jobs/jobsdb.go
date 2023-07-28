@@ -183,7 +183,7 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	//If no DS present, add one
 	// this will be configurable in the future
 	if len(jd.datasetList) == 0 {
-		jd.addNewDS(true, dataSetT{})
+		jd.addNewDS(true, dataSetT{}, 1)
 	}
 
 	// If softDeletion flag is set to true,
@@ -332,15 +332,19 @@ func (jd *HandleT) createJobStatusTableStatement(jobTableName string, jobStatusT
 		error_response JSONB);`, jobStatusTableName, jobTableName)
 }
 
-func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT) dataSetT {
+func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT, startSequence int64) dataSetT {
 
 	var newDS dataSetT
 	var newDSIdx string
 
 	dsList := jd.getDSList(true)
-	lastDS := dsList[len(dsList) - 1]
-	lastDSIdxInt, _ := strconv.Atoi(lastDS.Index)
-	newDSIdx = strconv.Itoa(lastDSIdxInt + 1)
+	if len(dsList) == 0 {
+		newDSIdx = "1"
+	} else {
+		lastDS := dsList[len(dsList) - 1]
+		lastDSIdxInt, _ := strconv.Atoi(lastDS.Index)
+		newDSIdx = strconv.Itoa(lastDSIdxInt + 1)
+	}
 
 	newDS.JobTable, newDS.JobStatusTable = jd.createTableNames(newDSIdx)
 	newDS.Index = newDSIdx
@@ -354,6 +358,10 @@ func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT) dataSetT {
 
 	//This is the migration case. We don't yet update the in-memory list till
 	//we finish the migration
+	_, _ = jd.dbHandle.Exec(sqlStatement)
+
+	sqlStatement = fmt.Sprintf("ALTER SEQUENCE %s_job_id_seq RESTART WITH %d;", newDS.JobTable, startSequence)
+
 	_, _ = jd.dbHandle.Exec(sqlStatement)
 
 	return newDS
@@ -965,7 +973,12 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 	}
 	logger.Info(fmt.Sprintf("There are %v unprocessed jobs in %v", len(unProcessedJobs), ds))
 	unProcessedJobIds := []string{}
+	var maxJobID int64
+	maxJobID = 0
 	for _, job := range unProcessedJobs {
+		if maxJobID < job.JobID {
+			maxJobID = job.JobID
+		}
 		unProcessedJobIds = append(unProcessedJobIds, strconv.FormatInt(job.JobID, 10))
 	}
 
@@ -975,7 +988,7 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 		return
 	}
 
-	migrateToDS := jd.addNewDS(false, dataSetT{})
+	migrateToDS := jd.addNewDS(false, dataSetT{}, maxJobID + 1)
 	_, success := jd.storeJobsDS(migrateToDS, true, false, unProcessedJobs)
 	err = jd.updateJobStatusDS(migrateToDS, unProcessedJobStatus, []string{})
 
