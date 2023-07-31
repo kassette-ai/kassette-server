@@ -20,7 +20,6 @@ import (
 	"github.com/tidwall/sjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/errors"
-	"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
@@ -219,29 +218,6 @@ func (gateway *HandleT) startWebHandler() {
 		gateway.configDB.Update(config, config.WriteKey)
 
 		c.JSON(http.StatusOK, backendconfig.GetConfig())
-	})
-
-	r.POST("/configtable", func(c *gin.Context) {
-		var config backendconfig.SourceAdvancedConfig
-		err := c.BindJSON(&config)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"response": "invalid JSON",
-			})
-			return
-		}
-		gateway.configDB.UpdateAdvanced(config, "write_key") //hardcoded write_key
-		// reinitialisation
-		advancedConfig, ok := gateway.configDB.GetAllAdvancedConfigs()
-		if ok {
-			var warehouseDB integrations.HandleT
-			warehouseDB.Init()
-			warehouseDB.CreateDestTable(advancedConfig)
-			warehouseDB.Close()
-		} else {
-			log.Print("Failed to pull advanced config")
-		}
-
 	})
 
 	serverPort := viper.GetString("serverPort")
