@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 
-	"github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
@@ -29,8 +27,6 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 		return false
 	}
 
-	//parsedJSON := gjson.ParseBytes(jsonData)
-	//log.Printf("event log message: JSON parseddd,  %s", parsedJSON)
 	payloads, ok := parsedJSON["payload"].([]interface{})
 	if !ok {
 		log.Fatal("Error: 'payload' is not an array")
@@ -44,57 +40,21 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 			return false
 		}
 
-		kassette_data_type := data["kassette_data_type"]   //payload.Get("kassette_data_type").String()
-		kassette_data_agent := data["kassette_data_agent"] //payload.Get("kassette_data_agent").String()
-		// Define the regular expression pattern
-		pattern := regexp.MustCompile(`^kassette_data_`)
-		// Create a map to hold the JSON data
-		//		data := make(map[string]string)
-		// Unmarshal the JSON data into the map
-		// err := json.Unmarshal(jsonData, &data)
-		// if err != nil {
-		// 	log.Fatal(fmt.Printf("Type of num: %T\n", payload))
-		// 	return false
-		// }
-		//log.Fatal(fmt.Printf("Type of num: %T\n", data))
-		// Create a slice to store the matching keys
-		matchingKeys := make([]string, 0)
-		matchingValues := make([]string, 0)
-		// Iterate over the map and check if the key matches the pattern
-		for key, value := range data {
-			if !pattern.MatchString(key) {
-				if str, ok := value.(string); ok {
-					matchingKeys = append(matchingKeys, key)
-					matchingValues = append(matchingValues, str)
-				}
-			}
-		}
+		query := fmt.Sprintf(`INSERT INTO camunda_eventlog (	event_id, process_instance, task_name, task_type, task_seq, process_id, process_name, assignee_, task_start_time, task_end_time, task_duration ) VALUES ( '%s', '%s', '%s', '%s', %v, '%s', '%s', '%s', '%s', '%s', %v );`, data["event_id"],
+			data["process_instance"],
+			data["task_name"],
+			data["task_type"],
+			data["task_seq"],
+			data["process_id"],
+			data["process_name"],
+			data["assignee_"],
+			data["task_start_time"],
+			data["task_end_time"],
+			data["task_duration"])
 
-		if kassette_data_agent == "camunda" {
-			query := fmt.Sprintf("INSERT INTO %s (", kassette_data_type)
-			for i, key := range matchingKeys {
-				query += pq.QuoteIdentifier(key)
-				if i < len(matchingKeys)-1 {
-					query += ","
-				}
-			}
-			query += ") VALUES ("
-			for i, value := range matchingValues {
-				query += "'" + value + "'"
-				if i < len(matchingValues)-1 {
-					query += ","
-				}
-			}
-			query += ")"
-
-			//log.Printf(query)
-			_, err = cd.dbHandle.Exec(query)
-			if err != nil {
-				log.Fatal(err)
-				return false
-			}
-		} else {
-			log.Fatal(fmt.Sprintf("Unknown Data Agent: %s", kassette_data_agent))
+		_, err = cd.dbHandle.Exec(query)
+		if err != nil {
+			log.Fatal(err)
 			return false
 		}
 	}
@@ -133,45 +93,22 @@ func GetConnectionString() string {
 		viper.GetString("warehouse.name"))
 }
 
-func (cd *HandleT) CreateDestTable(advancedConfig map[string]interface{}) {
-	configs, ok := advancedConfig["source_config"].([]interface{})
-	if !ok {
-		log.Print("Error: 'source_config' is not an array")
-		return
-	}
-
-	for _, config := range configs {
-		data, ok := config.(map[string]interface{})
-		if !ok {
-			log.Print("Error: 'config' is not a map", data)
-		}
-		//log.Print(fmt.Sprintf("Table: %s, fields: %s", data["kassette_data_type"], data["config"]))
-		table_config, ok := data["config"].([]interface{})
-		if !ok {
-			log.Fatal("Error: 'data[config]' is not a array", data["config"])
-		}
-		query := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", data["kassette_data_type"])
-		for i, value := range table_config {
-			aa, ok := value.(map[string]interface{})
-			if !ok {
-				log.Fatal("Error: 'aa' is not a map", aa)
-			}
-			for a, b := range aa {
-				bstr, ok := b.(string)
-				if !ok {
-					log.Fatal("Error: bstr is not a string: ", bstr)
-				}
-				query += a + " " + bstr
-			}
-			if i < len(table_config)-1 {
-				query += ", "
-			}
-		}
-		query += ");"
-		//log.Print(fmt.Sprintf("Create Table statements: %s", query))
-		_, err := cd.dbHandle.Exec(query)
-		if err != nil {
-			log.Fatal(err)
-		}
+func (cd *HandleT) CreateDestTable() {
+	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS camunda_eventlog 
+	(id BIGSERIAL PRIMARY KEY, event_id character varying, 
+		process_instance character varying, 
+		task_name character varying, 
+		task_type character varying,
+		task_seq bigint,
+		process_id character varying,
+		process_name character varying,
+		assignee_ character varying,
+		task_start_time timestamp without time zone,
+		task_end_time timestamp without time zone,
+		task_duration bigint
+		 );`)
+	_, err := cd.dbHandle.Exec(query)
+	if err != nil {
+		log.Fatal(err)
 	}
 }

@@ -65,24 +65,6 @@ func (cd *HandleT) Update(t SourceT, write_key string) {
 	}
 }
 
-func (cd *HandleT) UpdateAdvanced(t SourceAdvancedConfig, write_key string) {
-
-	jsonData, err := json.Marshal(t)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	sqlStatement := fmt.Sprintf(`UPDATE source_config set advanced = '%s' where write_key = '%s';`, jsonData, write_key)
-
-	_, err = cd.dbHandle.Exec(sqlStatement)
-
-	if err != nil {
-		log.Fatal(fmt.Sprintf("Failed to update advanced in source_config table %s", err))
-	}
-
-}
-
 func WaitForConfig() {
 	for {
 		if initialized {
@@ -134,32 +116,6 @@ func (cd *HandleT) Setup() {
 	cd.createConfigTable()
 }
 
-func (cd *HandleT) GetAllAdvancedConfigs() (map[string]interface{}, bool) {
-	rows, err := cd.dbHandle.Query("SELECT advanced FROM source_config;")
-	if err != nil {
-		log.Fatal("No configuration present in the DB")
-	}
-	var jsonData []byte
-	var data map[string]interface{}
-
-	for rows.Next() {
-		err := rows.Scan(&jsonData)
-		if err != nil {
-			log.Print("No Data in rows")
-			return data, false
-		}
-
-		err = json.Unmarshal(jsonData, &data)
-		if err != nil {
-			log.Print("can not unmarshal")
-			return data, false
-		}
-
-	}
-	return data, true
-
-}
-
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
 
 	sqlStatement := fmt.Sprintf(`SELECT id, source, write_key FROM source_config`)
@@ -203,7 +159,6 @@ func (cd *HandleT) createConfigTable() {
 		`CREATE TABLE IF NOT EXISTS source_config (
 		id BIGSERIAL PRIMARY KEY,
 		source JSONB NOT NULL,
-		advanced JSONB,
 		write_key VARCHAR(255) NOT NULL);`)
 
 	_, err = cd.dbHandle.Exec(sqlStatement)
