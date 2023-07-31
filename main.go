@@ -49,7 +49,7 @@ func main() {
 	// source environment variables
 	//setupPostgres()
 	var gatewayDB jobsdb.HandleT
-	gatewayDB.Setup(false, "gw", 0, false)
+	gatewayDB.Setup(false, "gw", 0, false, false)
 
 	var routerDB jobsdb.HandleT
 	var batchRouterDB jobsdb.HandleT
@@ -60,8 +60,8 @@ func main() {
 	warehouseDB.Init()
 	warehouseDB.CreateDestTable()
 
-	routerDB.Setup(false, "rt", routerDBRetention, false)
-	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false)
+	routerDB.Setup(false, "rt", routerDBRetention, false, true)
+	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false, false)
 
 	var processor processor.HandleT
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
