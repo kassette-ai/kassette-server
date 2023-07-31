@@ -285,6 +285,11 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				if submitStatus {
 					respStatus = "200 OK"
 					respStatusCode = 200
+					respBody = "{}"
+				} else {
+					respStatus = "501 ERROR"
+					respStatusCode = 501
+					respBody = "{}"
 				}
 				break
 			} else if requestMethod == "S3" {
@@ -315,11 +320,15 @@ func (rt *HandleT) workerProcess(worker *workerT) {
 				if upload != nil {
 					log.Printf("Failed to save to S3, %s", upload)
 					submitStatus = false
+					respStatus = "502 ERROR"
+					respStatusCode = 502
+					respBody = "{}"
 					break
 				} else {
 					submitStatus = true
 					respStatus = "200 OK"
 					respStatusCode = 200
+					respBody = "{}"
 					break
 				}
 
