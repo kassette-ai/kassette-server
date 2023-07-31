@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"time"
 
+	"github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
@@ -15,6 +18,11 @@ type HandleT struct {
 
 func (cd *HandleT) Close() {
 	cd.dbHandle.Close()
+}
+
+func isNotNumber(str string) bool {
+	_, err := strconv.Atoi(str)
+	return err != nil
 }
 
 func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
@@ -40,19 +48,57 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 			return false
 		}
 
-		query := fmt.Sprintf(`INSERT INTO camunda_eventlog (	event_id, process_instance, task_name, task_type, task_seq, process_id, process_name, assignee_, task_start_time, task_end_time, task_duration ) VALUES ( '%s', '%s', '%s', '%s', %v, '%s', '%s', '%s', '%s', '%s', %v );`, data["event_id"],
+		task_seq := fmt.Sprintf("%v", data["task_seq"])
+		if isNotNumber(task_seq) {
+			task_seq = "NULL"
+		}
+
+		task_duration := fmt.Sprintf("%v", data["task_seq"])
+		if isNotNumber(task_duration) {
+			task_duration = "NULL"
+		}
+
+		var task_start_time pq.NullTime
+		task_start_time_str, ok := data["task_start_time"].(string)
+		if ok {
+			timestamp, err := time.Parse("2006-01-02 15:04:05", task_start_time_str)
+			if err == nil {
+				task_start_time.Time = timestamp
+				task_start_time.Valid = true
+			} else {
+				task_start_time.Valid = false
+			}
+		} else {
+			log.Fatal("Problem with task_start_time")
+		}
+
+		var task_end_time pq.NullTime
+		task_end_time_str, ok := data["task_end_time"].(string)
+		if ok {
+			timestamp, err := time.Parse("2006-01-02 15:04:05", task_end_time_str)
+			if err == nil {
+				task_end_time.Time = timestamp
+				task_end_time.Valid = true
+			} else {
+				task_end_time.Valid = false
+			}
+		} else {
+			log.Fatal("Problem with task_end_time")
+		}
+
+		query := fmt.Sprintf(`INSERT INTO camunda_eventlog (event_id, process_instance, task_name, task_type, task_seq, process_id, process_name, assignee_, task_start_time, task_end_time, task_duration ) VALUES ( '%s', '%s', '%s', '%s', %v, '%s', '%s', '%s',$1, $2, %v );`, data["event_id"],
 			data["process_instance"],
 			data["task_name"],
 			data["task_type"],
-			data["task_seq"],
+			task_seq,
 			data["process_id"],
 			data["process_name"],
 			data["assignee_"],
-			data["task_start_time"],
-			data["task_end_time"],
-			data["task_duration"])
+			task_duration)
 
-		_, err = cd.dbHandle.Exec(query)
+		log.Printf(query)
+
+		_, err = cd.dbHandle.Exec(query, task_start_time, task_end_time)
 		if err != nil {
 			log.Fatal(err)
 			return false
