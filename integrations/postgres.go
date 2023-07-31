@@ -96,7 +96,7 @@ func (cd *HandleT) WriteWarehouse(jsonData []byte) bool {
 			data["assignee_"],
 			task_duration)
 
-		log.Printf(query)
+		//log.Printf(query)
 
 		_, err = cd.dbHandle.Exec(query, task_start_time, task_end_time)
 		if err != nil {
