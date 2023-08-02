@@ -273,13 +273,13 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
 	//var err error
-	//writeKey, _, ok := r.BasicAuth()
-	//sourceID := gateway.getSourceIDForWriteKey(writeKey)
-	//if !ok {
-	//	println("Basic auth failed")
-	//}
-
-	writeKey := "camunda"
+	writeKey, _, ok := r.BasicAuth()
+	if !ok {
+		println("Basic auth failed")
+	}
+	sourceID := gateway.getSourceIDForWriteKey(writeKey)
+	log.Printf("Extracted write key: %s, and sourceId: %s", writeKey, sourceID)
+	//	writeKey := "camunda"
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
 		logger.Error("Error getting payload from request with source: " + writeKey)
@@ -718,8 +718,9 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			}
 			body := req.requestPayload
 
-			writeKey := "write_key"
-			logger.Info(fmt.Sprint("hard coded writeKey: ", writeKey))
+			//writeKey := "write_key"
+			//logger.Info(fmt.Sprint("hard coded writeKey: ", writeKey))
+			writeKey := req.writeKey
 
 			// set anonymousId if not set in payload
 			var index int
