@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+    "github.com/gin-contrib/cors"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/tidwall/gjson"
@@ -189,8 +190,7 @@ func (gateway *HandleT) startWebHandler() {
 
 	r := gin.Default()
 	r.Use(gin.Recovery())
-
-	CORSMiddleware()
+	r.Use(cors.Default())
 
 	//r.POST("/web", webPageHandler)
 	r.POST("/extract", gateway.extractHandler)
@@ -218,6 +218,12 @@ func (gateway *HandleT) startWebHandler() {
 		gateway.configDB.Update(config, config.WriteKey)
 
 		c.JSON(http.StatusOK, backendconfig.GetConfig())
+	})
+
+	r.POST("/service-catalogue", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+		})
 	})
 
 	serverPort := viper.GetString("serverPort")
@@ -313,22 +319,6 @@ func (*HandleT) isValidWriteKey(writeKey string) bool {
 
 	_, ok := writeKeysSourceMap[writeKey]
 	return ok
-}
-
-func CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
 }
 
 func (gateway *HandleT) runUserWebRequestWorkers(ctx context.Context) {
