@@ -114,6 +114,7 @@ func (cd *HandleT) Setup() {
 	}
 
 	cd.createConfigTable()
+	cd.createServiceCatalogueTable()
 }
 
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
@@ -170,6 +171,29 @@ func (cd *HandleT) createConfigTable() {
 	return
 }
 
+func (cd *HandleT) createServiceCatalogueTable() {
+
+	sqlStatement := fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS service_catalogue (
+		id BIGSERIAL PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		type VARCHAR(255) NOT NULL,
+		access VARCHAR(255) NOT NULL,
+		category VARCHAR(255) NOT NULL,
+		url TEXT NOT NULL,
+		notes TEXT NOT NULL,
+		metadata JSONB,
+		iconurl TEXT NOT NULL);`)
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to create service_catalogue table %s", err))
+	}
+
+	return
+}
+
 func (cd *HandleT) insertSource(writeKey string, source SourceT) bool {
 
 	var err error
@@ -182,9 +206,68 @@ func (cd *HandleT) insertSource(writeKey string, source SourceT) bool {
 
 	_, err = cd.dbHandle.Exec(sqlStatement)
 
-	if err != nil {
+	if err != nil {	
 		logger.Error(fmt.Sprintf("Failed to insert to source_config table %s", err))
 		return false
 	}
+	return true
+}
+
+func (cd *HandleT) CreateNewServiceCatalogue(catalogue ServiceCatalogue) bool {
+
+	sqlStatement := fmt.Sprintf(`INSERT INTO service_catalogue (name, type, access, category, url, notes, metadata, iconurl) values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')`,
+			catalogue.Name, catalogue.Type, catalogue.Access, catalogue.Category, catalogue.Url, catalogue.Notes, catalogue.MetaData, catalogue.IconUrl)
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to insert new service catalogue to service_catalogue table. Error: %s", err))
+		return false
+	}
+
+	return true
+}
+
+func (cd *HandleT) GetServiceCatalogue(service_type string) []ServiceCatalogue {
+
+	sqlStatement := "Select id, name, type, access, category, url, notes, metadata, iconurl FROM service_catalogue"
+
+	if service_type == "src" {
+		sqlStatement += " where type='Source'";
+	} else if service_type == "dest" {
+		sqlStatement += " where type='Destination'";
+	}
+
+	logger.Info(sqlStatement)
+
+	rows, err := cd.dbHandle.Query(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch from service catalogue table. Error: %s", err))
+		return []ServiceCatalogue{}
+	}
+
+	catalogues := []ServiceCatalogue{}
+	for rows.Next() {
+		var cata ServiceCatalogue
+		err := rows.Scan(&cata.ID, &cata.Name, &cata.Type, &cata.Access, &cata.Category, &cata.Url, &cata.Notes, &cata.MetaData, &cata.IconUrl)
+		if err == nil {
+			catalogues = append(catalogues, cata)
+		}
+	}
+	return catalogues
+
+}
+
+func (cd *HandleT) DeleteServiceCatalogue(service_id string) bool {
+	sqlStatement := fmt.Sprintf("DELETE from service_catalogue where id=%s", service_id)
+	
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to delete a service catalogue from service_catalogue table. Error: %s", err))
+		return false
+	}
+
 	return true
 }

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-    "github.com/gin-contrib/cors"
+	"github.com/gin-contrib/cors"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/tidwall/gjson"
@@ -189,6 +189,7 @@ func (gateway *HandleT) startWebHandler() {
 	logger.Info("Starting web handler")
 
 	r := gin.Default()
+	r.Static("/static", "./static")
 	r.Use(gin.Recovery())
 	r.Use(cors.Default())
 
@@ -220,9 +221,44 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, backendconfig.GetConfig())
 	})
 
-	r.POST("/service-catalogue", func(c *gin.Context) {
+	r.GET("/service-catalogue", func(c *gin.Context) {
+		service_type := c.Query("type")
+		c.JSON(http.StatusOK, gateway.configDB.GetServiceCatalogue(service_type))
+	})
+
+	r.POST("/service-catalogue", func(c* gin.Context) {
+		
+		var catalogue backendconfig.ServiceCatalogue
+		catalogue.Name = c.PostForm("name")
+		catalogue.Type = c.PostForm("type")
+		catalogue.Access = c.PostForm("access")
+		catalogue.Category = c.PostForm("category")
+		catalogue.Url = c.PostForm("url")
+		catalogue.Notes = c.PostForm("notes")
+		catalogue.MetaData = c.PostForm("metadata")
+
+		file, err := c.FormFile("icon")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": "No Valid File"})
+			return
+		}
+
+		destIconPath, err := misc.UploadFile("static/icons/", file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+			return
+		}
+		catalogue.IconUrl = destIconPath
+
+		success := gateway.configDB.CreateNewServiceCatalogue(catalogue)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/service-catalogue/:id", func(c *gin.Context) {
+		service_id := c.Param("id")
+		success := gateway.configDB.DeleteServiceCatalogue(service_id)
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
+			"success": success,
 		})
 	})
 
