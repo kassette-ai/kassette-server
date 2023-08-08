@@ -55,3 +55,32 @@ type TransformationT struct {
 	ID        string
 	Config    map[string]interface{}
 }
+
+
+type ServiceCatalogueT struct {
+	ID 			int				`json:"id"`
+	Name		string			`json:"name"`
+	Type		string			`json:"type"`
+	Access		string			`json:"access"`
+	Category	string			`json:"category"`
+	Url			string			`json:"url"`
+	Notes		string			`json:"notes"`
+	MetaData	string			`json:"metadata"`
+	IconUrl 	string			`json:"iconurl"`
+}
+
+type SourceInstanceT struct {
+	ID			int				`json:"id"`
+	Name		string			`json:"name"`
+	ServiceID	int				`json:"service_id"`
+	WriteKey	string			`json:"write_key"`
+	CustomerID 	int				`json:"customer_id"`
+	Config		string			`json:"config"`
+	Status		string			`json:"status"`
+}
+
+type SourceDetailsT struct {
+	Source			SourceInstanceT		`json:"source"`
+	Catalogue		ServiceCatalogueT	`json:"catalogue"`
+	Destinations	[]string			`json:"destinations"`
+}

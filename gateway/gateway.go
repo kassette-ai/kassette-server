@@ -12,8 +12,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/tidwall/gjson"
@@ -188,9 +190,9 @@ func (gateway *HandleT) startWebHandler() {
 	logger.Info("Starting web handler")
 
 	r := gin.Default()
+	r.Static("/static", "./static")
 	r.Use(gin.Recovery())
-
-	CORSMiddleware()
+	r.Use(cors.Default())
 
 	//r.POST("/web", webPageHandler)
 	r.POST("/extract", gateway.extractHandler)
@@ -218,6 +220,112 @@ func (gateway *HandleT) startWebHandler() {
 		gateway.configDB.Update(config, config.WriteKey)
 
 		c.JSON(http.StatusOK, backendconfig.GetConfig())
+	})
+
+	r.GET("/service-catalogue", func(c *gin.Context) {
+		service_type := c.Query("type")
+		c.JSON(http.StatusOK, gateway.configDB.GetServiceCatalogue(service_type))
+	})
+
+	r.GET("/service-catalogue/:id", func(c *gin.Context) {
+		service_id_str := c.Param("id")
+		service_id, err := strconv.Atoi(service_id_str);
+		catalogue, err := gateway.configDB.GetServiceCatalogueByID(service_id);
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+		} else {
+			c.JSON(http.StatusOK, catalogue)
+		}
+	})
+
+	r.POST("/service-catalogue", func(c* gin.Context) {
+		
+		var catalogue backendconfig.ServiceCatalogueT
+		catalogue.Name = c.PostForm("name")
+		catalogue.Type = c.PostForm("type")
+		catalogue.Access = c.PostForm("access")
+		catalogue.Category = c.PostForm("category")
+		catalogue.Url = c.PostForm("url")
+		catalogue.Notes = c.PostForm("notes")
+		catalogue.MetaData = c.PostForm("metadata")
+
+		file, err := c.FormFile("icon")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": "No Valid File"})
+			return
+		}
+
+		destIconPath, err := misc.UploadFile("static/icons/", file)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+			return
+		}
+		catalogue.IconUrl = destIconPath
+
+		success := gateway.configDB.CreateNewServiceCatalogue(catalogue)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/service-catalogue/:id", func(c *gin.Context) {
+		service_id := c.Param("id")
+		success := gateway.configDB.DeleteServiceCatalogue(service_id)
+		c.JSON(http.StatusOK, gin.H{
+			"success": success,
+		})
+	})
+
+	r.GET("/source", func(c* gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllSources()) 
+	})
+
+	r.GET("/source/:id", func(c* gin.Context) {
+		source_id_str := c.Param("id")
+		source_id, err := strconv.Atoi(source_id_str);
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			source, err := gateway.configDB.GetSourceByID(source_id)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			}
+			catalogue, err := gateway.configDB.GetServiceCatalogueByID(source.ServiceID)
+			var sourceDetail backendconfig.SourceDetailsT
+			sourceDetail.Source = source
+			sourceDetail.Catalogue = catalogue
+			c.JSON(http.StatusOK, sourceDetail)
+		}
+	})
+
+	r.POST("/source", func(c* gin.Context) {
+		var source backendconfig.SourceInstanceT
+		err := c.BindJSON(&source)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
+			c.JSON(http.StatusBadRequest, err.Error())
+		}
+		success := gateway.configDB.CreateNewSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.PATCH("/source", func(c* gin.Context) {
+		var source backendconfig.SourceInstanceT
+		err := c.BindJSON(&source)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		success := gateway.configDB.UpdateSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/source/:id", func(c* gin.Context) {
+		source_id_str := c.Param("id")
+		source_id, err := strconv.Atoi(source_id_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			success := gateway.configDB.DeleteSource(source_id)
+			c.JSON(http.StatusOK, gin.H{"success": success})
+		}
 	})
 
 	serverPort := viper.GetString("serverPort")
@@ -313,22 +421,6 @@ func (*HandleT) isValidWriteKey(writeKey string) bool {
 
 	_, ok := writeKeysSourceMap[writeKey]
 	return ok
-}
-
-func CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	}
 }
 
 func (gateway *HandleT) runUserWebRequestWorkers(ctx context.Context) {

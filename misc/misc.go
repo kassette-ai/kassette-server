@@ -1,6 +1,8 @@
 package misc
 
 import (
+	"os"
+	"io"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"strings"
+	"mime/multipart"
 )
 
 const (
@@ -242,4 +245,36 @@ func Assert(cond bool) {
 		defer bugsnag.AutoNotify()
 		panic("Assertion failed")
 	}
+}
+
+// Upload a file
+func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) {
+		
+	err := os.MkdirAll(DestDirPath, os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+
+	DestPath := DestDirPath + file.Filename
+
+	dst, err := os.Create(DestPath)
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+
+	// Open the uploaded file
+	src, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	// Copy the content of the uploaded file to the new file
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		return "", err
+	}
+	
+	return DestPath, nil
 }
