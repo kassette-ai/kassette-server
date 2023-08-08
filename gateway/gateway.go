@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
@@ -226,9 +227,20 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gateway.configDB.GetServiceCatalogue(service_type))
 	})
 
+	r.GET("/service-catalogue/:id", func(c *gin.Context) {
+		service_id_str := c.Param("id")
+		service_id, err := strconv.Atoi(service_id_str);
+		catalogue, err := gateway.configDB.GetServiceCatalogueByID(service_id);
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+		} else {
+			c.JSON(http.StatusOK, catalogue)
+		}
+	})
+
 	r.POST("/service-catalogue", func(c* gin.Context) {
 		
-		var catalogue backendconfig.ServiceCatalogue
+		var catalogue backendconfig.ServiceCatalogueT
 		catalogue.Name = c.PostForm("name")
 		catalogue.Type = c.PostForm("type")
 		catalogue.Access = c.PostForm("access")
@@ -260,6 +272,60 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{
 			"success": success,
 		})
+	})
+
+	r.GET("/source", func(c* gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllSources()) 
+	})
+
+	r.GET("/source/:id", func(c* gin.Context) {
+		source_id_str := c.Param("id")
+		source_id, err := strconv.Atoi(source_id_str);
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			source, err := gateway.configDB.GetSourceByID(source_id)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			}
+			catalogue, err := gateway.configDB.GetServiceCatalogueByID(source.ServiceID)
+			var sourceDetail backendconfig.SourceDetailsT
+			sourceDetail.Source = source
+			sourceDetail.Catalogue = catalogue
+			c.JSON(http.StatusOK, sourceDetail)
+		}
+	})
+
+	r.POST("/source", func(c* gin.Context) {
+		var source backendconfig.SourceInstanceT
+		err := c.BindJSON(&source)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
+			c.JSON(http.StatusBadRequest, err.Error())
+		}
+		success := gateway.configDB.CreateNewSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.PATCH("/source", func(c* gin.Context) {
+		var source backendconfig.SourceInstanceT
+		err := c.BindJSON(&source)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		success := gateway.configDB.UpdateSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/source/:id", func(c* gin.Context) {
+		source_id_str := c.Param("id")
+		source_id, err := strconv.Atoi(source_id_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			success := gateway.configDB.DeleteSource(source_id)
+			c.JSON(http.StatusOK, gin.H{"success": success})
+		}
 	})
 
 	serverPort := viper.GetString("serverPort")

@@ -27,3 +27,6 @@ go.work
 go.mod
 go.sum
 kassette-server
+
+# Static Files
+static/icons
