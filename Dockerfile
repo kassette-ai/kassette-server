@@ -15,6 +15,8 @@ COPY kassette-server /opt/kassette-ai/
 RUN chmod 0755 /opt/kassette-ai/kassette-server
 RUN chown -R kassette:kassette /opt/kassette-ai/
 
+COPY static /opt/kassette-ai/static
+
 
 USER kassette
 
