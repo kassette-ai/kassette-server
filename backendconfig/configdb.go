@@ -116,6 +116,7 @@ func (cd *HandleT) Setup() {
 	cd.createConfigTable()
 	cd.createServiceCatalogueTable()
 	cd.createSourceTable()
+	cd.createDestinationTable()
 }
 
 func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
@@ -211,6 +212,26 @@ func (cd *HandleT) createSourceTable() {
 
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to create source table %s", err))
+	}
+
+	return
+}
+
+func (cd *HandleT) createDestinationTable() {
+
+	sqlStatement := fmt.Sprintf(
+		`CREATE TABLE IF NOT EXISTS destination (
+			id BIGSERIAL PRIMARY KEY,
+			name VARCHAR(255) NOT NULL,
+			service_id INT REFERENCES service_catalogue(id),
+			customer_id INT,
+			config JSONB NOT NULL,
+			status VARCHAR(255) NOT NULL);`)
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to create destination table %s", err))
 	}
 
 	return
@@ -315,8 +336,6 @@ func (cd *HandleT) DeleteServiceCatalogue(service_id string) bool {
 func (cd *HandleT) CreateNewSource(source SourceInstanceT) bool {
 	sqlStatement := fmt.Sprintf(`INSERT INTO source (name, service_id, write_key, customer_id, config, status) values('%s', %d, '%s', %d, '%s', '%s')`, source.Name, source.ServiceID, source.WriteKey, 1, source.Config, "enabled")
 
-	logger.Info(sqlStatement)
-
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
 	if err != nil {
@@ -327,28 +346,30 @@ func (cd *HandleT) CreateNewSource(source SourceInstanceT) bool {
 	return true
 }
 
-func (cd *HandleT) GetAllSources() []SourceDetailsT {
+func (cd *HandleT) GetAllSources() []SourceConnectionsT {
 	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, write_key, customer_id, config, status from source");
 
 	rows, err := cd.dbHandle.Query(sqlStatement)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to fetch sources from source table. Error: %s", err))
-		return []SourceDetailsT{}
+		return []SourceConnectionsT{}
 	}
 	defer rows.Close()
 
-	response := []SourceDetailsT{}
+	response := []SourceConnectionsT{}
 	for rows.Next() {
 		var source SourceInstanceT
-		sourceDetail := SourceDetailsT{}
+		var sourceDetail SourceDetailT
+		var sourceConnection SourceConnectionsT
 		err = rows.Scan(&source.ID, &source.Name, &source.ServiceID, &source.WriteKey, &source.CustomerID, &source.Config, &source.Status)
 		if err == nil {
 			sourceDetail.Source = source
 			cata, err := cd.GetServiceCatalogueByID(source.ServiceID)
 			if err == nil {
 				sourceDetail.Catalogue = cata
-				sourceDetail.Destinations = []string{}
-				response = append(response, sourceDetail)
+				sourceConnection.SourceDetail = sourceDetail
+				sourceConnection.DestinationDetails = []DestinationDetailT{}
+				response = append(response, sourceConnection)
 			}
 		}
 	}
@@ -396,6 +417,96 @@ func (cd* HandleT) DeleteSource(sourceID int) bool {
 
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to delete the source from the source table. Error: %s", err))
+		return false
+	}
+	
+	return true
+}
+
+func (cd *HandleT) GetAllDestinations() []DestinationConnectionsT {
+	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, customer_id, config, status from destination");
+
+	rows, err := cd.dbHandle.Query(sqlStatement)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch destinations from destination table. Error: %s", err))
+		return []DestinationConnectionsT{}
+	}
+	defer rows.Close()
+
+	response := []DestinationConnectionsT{}
+	for rows.Next() {
+		var destination DestinationInstanceT
+		var destinationDetail DestinationDetailT
+		var destinationConnection DestinationConnectionsT
+		err = rows.Scan(&destination.ID, &destination.Name, &destination.ServiceID, &destination.CustomerID, &destination.Config, &destination.Status)
+		if err == nil {
+			destinationDetail.Destination = destination
+			cata, err := cd.GetServiceCatalogueByID(destination.ServiceID)
+			if err == nil {
+				destinationDetail.Catalogue = cata
+				destinationConnection.DestinationDetail = destinationDetail
+				destinationConnection.SourceDetails = []SourceDetailT{}
+				response = append(response, destinationConnection)
+			}
+		}
+	}
+	return response
+}
+
+func (cd *HandleT) GetDestinationByID(ID int) (DestinationInstanceT, error) {
+	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, customer_id, config, status from destination where id = %d", ID)
+
+	rows, err := cd.dbHandle.Query(sqlStatement)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch destination from destination table by ID. Error: %s", err))
+		return DestinationInstanceT{}, err
+	}
+	defer rows.Close()
+
+	var destination DestinationInstanceT
+	for rows.Next() {
+		err = rows.Scan(&destination.ID, &destination.Name, &destination.ServiceID, &destination.CustomerID, &destination.Config, &destination.Status)
+		if err != nil {
+			return DestinationInstanceT{}, err
+		}
+	}
+	
+	return destination, nil
+}
+
+func (cd *HandleT) CreateNewDestination(destination DestinationInstanceT) bool {
+	sqlStatement := fmt.Sprintf(`INSERT INTO destination (name, service_id, customer_id, config, status) values('%s', %d, %d, '%s', '%s')`, destination.Name, destination.ServiceID, 1, destination.Config, "enabled")
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to create a new destination into the destination table. Error: %s", err))
+		return false
+	}
+	
+	return true
+}
+
+func (cd *HandleT) UpdateDestination(destination DestinationInstanceT) bool {
+	sqlStatement := fmt.Sprintf("UPDATE destination SET name='%s', service_id=%d, customer_id=%d, config='%s', status='%s' where id = %d;", destination.Name, destination.ServiceID, destination.CustomerID, destination.Config, destination.Status, destination.ID);
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to update the destination inside the destination table. Error: %s", err))
+		return false
+	}
+	
+	return true
+}
+
+func (cd* HandleT) DeleteDestination(destinationID int) bool {
+	sqlStatement := fmt.Sprintf("DELETE from destination where id = %d", destinationID)
+
+	_, err := cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to delete the destination from the destination table. Error: %s", err))
 		return false
 	}
 	

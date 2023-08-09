@@ -79,8 +79,31 @@ type SourceInstanceT struct {
 	Status		string			`json:"status"`
 }
 
-type SourceDetailsT struct {
+type DestinationInstanceT struct {
+	ID			int				`json:"id"`
+	Name		string			`json:"name"`
+	ServiceID	int				`json:"service_id"`
+	CustomerID 	int				`json:"customer_id"`
+	Config		string			`json:"config"`
+	Status		string			`json:"status"`
+}
+
+type SourceDetailT struct {
 	Source			SourceInstanceT		`json:"source"`
 	Catalogue		ServiceCatalogueT	`json:"catalogue"`
-	Destinations	[]string			`json:"destinations"`
+}
+
+type DestinationDetailT struct {
+	Destination		DestinationInstanceT	`json:"destination"`
+	Catalogue		ServiceCatalogueT		`json:"catalogue"`
+}
+
+type SourceConnectionsT struct {
+	SourceDetail			SourceDetailT				`json:"source_detail"`
+	DestinationDetails		[]DestinationDetailT		`json:"destination_details"`
+}
+
+type DestinationConnectionsT struct {
+	DestinationDetail		DestinationDetailT			`json:"destination_detail"`
+	SourceDetails			[]SourceDetailT				`json:"source_details`
 }
