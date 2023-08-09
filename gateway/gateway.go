@@ -289,7 +289,7 @@ func (gateway *HandleT) startWebHandler() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			}
 			catalogue, err := gateway.configDB.GetServiceCatalogueByID(source.ServiceID)
-			var sourceDetail backendconfig.SourceDetailsT
+			var sourceDetail backendconfig.SourceDetailT
 			sourceDetail.Source = source
 			sourceDetail.Catalogue = catalogue
 			c.JSON(http.StatusOK, sourceDetail)
@@ -324,6 +324,60 @@ func (gateway *HandleT) startWebHandler() {
 			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
 		} else {
 			success := gateway.configDB.DeleteSource(source_id)
+			c.JSON(http.StatusOK, gin.H{"success": success})
+		}
+	})
+
+	r.GET("/destination", func(c* gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllDestinations()) 
+	})
+
+	r.GET("/destination/:id", func(c* gin.Context) {
+		destination_id_str := c.Param("id")
+		destination_id, err := strconv.Atoi(destination_id_str);
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			destination, err := gateway.configDB.GetDestinationByID(destination_id)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			}
+			catalogue, err := gateway.configDB.GetServiceCatalogueByID(destination.ServiceID)
+			var destinationDetail backendconfig.DestinationDetailT
+			destinationDetail.Destination = destination
+			destinationDetail.Catalogue = catalogue
+			c.JSON(http.StatusOK, destinationDetail)
+		}
+	})
+
+	r.POST("/destination", func(c* gin.Context) {
+		var destination backendconfig.DestinationInstanceT
+		err := c.BindJSON(&destination)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
+			c.JSON(http.StatusBadRequest, err.Error())
+		}
+		success := gateway.configDB.CreateNewDestination(destination)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.PATCH("/destination", func(c* gin.Context) {
+		var destination backendconfig.DestinationInstanceT
+		err := c.BindJSON(&destination)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		success := gateway.configDB.UpdateDestination(destination)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/destination/:id", func(c* gin.Context) {
+		destination_id_str := c.Param("id")
+		destination_id, err := strconv.Atoi(destination_id_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			success := gateway.configDB.DeleteDestination(destination_id)
 			c.JSON(http.StatusOK, gin.H{"success": success})
 		}
 	})
