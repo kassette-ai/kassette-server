@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/utils"
+	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/utils/logger"
 )
 
@@ -352,17 +353,37 @@ func (cd *HandleT) DeleteServiceCatalogue(service_id string) bool {
 	return true
 }
 
-func (cd *HandleT) CreateNewSource(source SourceInstanceT) bool {
-	sqlStatement := fmt.Sprintf(`INSERT INTO source (name, service_id, write_key, customer_id, config, status) values('%s', %d, '%s', %d, '%s', '%s')`, source.Name, source.ServiceID, source.WriteKey, 1, source.Config, "enabled")
+func (cd *HandleT) CreateNewSource(source SourceInstanceT) (string, bool) {
+	
+	sqlStatement := fmt.Sprintf(`INSERT INTO source (name, service_id, write_key, customer_id, config, status) values('%s', %d, '%s', %d, '%s', '%s') RETURNING id`, source.Name, source.ServiceID, source.WriteKey, 1, source.Config, "enabled")
 
-	_, err := cd.dbHandle.Exec(sqlStatement)
+	var writeKeyPayload misc.WriteKeyPayloadT
+	writeKeyPayload.CustomerID = 1
+
+	err := cd.dbHandle.QueryRow(sqlStatement).Scan(&writeKeyPayload.SourceID)
 
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to create a new source into the source table. Error: %s", err))
-		return false
+		return "", false
 	}
-	
-	return true
+
+	writeKey, err := misc.GenerateWriteKey(writeKeyPayload)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to generate a write key. Error: %s", err))
+		return "", false
+	}
+
+	sqlStatement = fmt.Sprintf(`UPDATE source SET write_key='%s' WHERE id=%d`, writeKey, writeKeyPayload.SourceID)
+
+	_, err = cd.dbHandle.Exec(sqlStatement)
+
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to update the generated write key. Error: %s", err))
+		return "", false
+	}
+
+	return writeKey, true
 }
 
 func (cd *HandleT) GetAllSources() []SourceConnectionsT {
