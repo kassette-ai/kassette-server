@@ -54,6 +54,9 @@ var (
 
 	// Checks a valid semver supplied
 	semverRegexp = regexp.MustCompile(`^v?([0-9]+)(\.[0-9]+)?(\.[0-9]+)?(-([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?(\+([0-9A-Za-z\-]+(\.[0-9A-Za-z\-]+)*))?$`)
+
+	// JWT Secret Key
+	secretKey string
 )
 
 func loadConfig() {
@@ -73,6 +76,8 @@ func loadConfig() {
 	maxReqSize = viper.GetInt("gateway.maxReqSizeInKB") * 1000
 
 	allowReqsWithoutUserIDAndAnonymousID = viper.GetBool("gateway.allowReqsWithoutUserIDAndAnonymousID")
+
+	secretKey = viper.GetString("secretKey")
 }
 
 type userWorkerBatchRequestT struct {
@@ -284,14 +289,10 @@ func (gateway *HandleT) startWebHandler() {
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
-			source, err := gateway.configDB.GetSourceByID(source_id)
+			sourceDetail, err := gateway.configDB.GetSourceDetailByID(source_id)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			}
-			catalogue, err := gateway.configDB.GetServiceCatalogueByID(source.ServiceID)
-			var sourceDetail backendconfig.SourceDetailT
-			sourceDetail.Source = source
-			sourceDetail.Catalogue = catalogue
 			c.JSON(http.StatusOK, sourceDetail)
 		}
 	})
@@ -303,8 +304,9 @@ func (gateway *HandleT) startWebHandler() {
 			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
 			c.JSON(http.StatusBadRequest, err.Error())
 		}
-		success := gateway.configDB.CreateNewSource(source)
-		c.JSON(http.StatusOK, gin.H{"success": success})
+
+		writeKey, success := gateway.configDB.CreateNewSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success, "write_key": writeKey})
 	})
 
 	r.PATCH("/source", func(c* gin.Context) {
@@ -338,14 +340,10 @@ func (gateway *HandleT) startWebHandler() {
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
-			destination, err := gateway.configDB.GetDestinationByID(destination_id)
+			destinationDetail, err := gateway.configDB.GetDestinationDetailByID(destination_id)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			}
-			catalogue, err := gateway.configDB.GetServiceCatalogueByID(destination.ServiceID)
-			var destinationDetail backendconfig.DestinationDetailT
-			destinationDetail.Destination = destination
-			destinationDetail.Catalogue = catalogue
 			c.JSON(http.StatusOK, destinationDetail)
 		}
 	})
@@ -379,6 +377,78 @@ func (gateway *HandleT) startWebHandler() {
 		} else {
 			success := gateway.configDB.DeleteDestination(destination_id)
 			c.JSON(http.StatusOK, gin.H{"success": success})
+		}
+	})
+
+	r.GET("/connection", func(c* gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllConnections()) 
+	})
+
+	r.GET("/connection/:id", func(c* gin.Context) {
+		connection_id_str := c.Param("id")
+		connection_id, err := strconv.Atoi(connection_id_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			connection, err := gateway.configDB.GetConnectionByID(connection_id)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			}
+			c.JSON(http.StatusOK, connection)
+		}
+	})
+
+	r.POST("/connection", func(c* gin.Context) {
+		var connection backendconfig.ConnectionInstanceT
+		err := c.BindJSON(&connection)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
+			c.JSON(http.StatusBadRequest, err.Error())
+		}
+		success := gateway.configDB.CreateNewConnection(connection)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.PATCH("/connection", func(c* gin.Context) {
+		var connection backendconfig.ConnectionInstanceT
+		err := c.BindJSON(&connection)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		}
+		success := gateway.configDB.UpdateConnection(connection)
+		c.JSON(http.StatusOK, gin.H{"success": success})
+	})
+
+	r.DELETE("/connection/:id", func(c *gin.Context) {
+		connection_id_str := c.Param("id")
+		connection_id, err := strconv.Atoi(connection_id_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			success := gateway.configDB.DeleteConnection(connection_id)
+			c.JSON(http.StatusOK, gin.H{"success": success})
+		}
+	})
+
+	r.GET("/source-config", func(c* gin.Context) {
+		writeKey := c.Query("writeKey")
+		customerID_str := c.Query("customerID")
+		customerID, err := strconv.Atoi(customerID_str)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+		} else {
+			writeKeyPayload, err := misc.GetWriteKeyPayload(writeKey)
+			if err != nil{
+				c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+			}
+			if writeKeyPayload.CustomerID != customerID {
+				c.JSON(http.StatusBadRequest, gin.H{"Error": "Token and customer id is not matched!"})
+			}
+			source, err := gateway.configDB.GetSourceByID(writeKeyPayload.SourceID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+			}
+			c.JSON(http.StatusOK, source.Config)
 		}
 	})
 

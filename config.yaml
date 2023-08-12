@@ -1,10 +1,10 @@
 ---
 database:
-  host: postgres
+  host: localhost
   user: kassette_user
   name: kassette
   password: password
-  port: 5432
+  port: 5430
   ssl_mode: disable
 
 gateway:
@@ -33,13 +33,14 @@ router:
   testSinkURL: http://localhost:8080/testSink
 
 warehouse:
-  host: postgres-warehouse
+  host: localhost
   user: kassette_user
   name: warehouse
   password: password
-  port: 5432
+  port: 5429
   ssl_mode: disable
 
 logLevel: INFO
 serverPort: 8088
 
+secretKey: KassetteAIJimCollins

@@ -6,8 +6,12 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"time"
+	"errors"
 	"github.com/bugsnag/bugsnag-go"
 	"github.com/google/uuid"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/spf13/viper"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -19,6 +23,16 @@ const (
 	RFC3339Milli          = "2006-01-02T15:04:05.000Z07:00"
 	NOTIMEZONEFORMATPARSE = "2006-01-02T15:04:05"
 )
+
+type WriteKeyPayloadT struct {
+	CustomerID			int				`json:"customer_id"`
+	SourceID			int				`json:"source_id"`
+}
+
+type WriteKeyTokenClaimsT struct {
+	Sub					WriteKeyPayloadT	`json:"sub"`
+	jwt.StandardClaims
+}
 
 func GetTagName(id string, names ...string) string {
 	var truncatedNames string
@@ -277,4 +291,47 @@ func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) 
 	}
 	
 	return DestPath, nil
+}
+
+//Generate a jwt token
+func GenerateWriteKey(payload WriteKeyPayloadT) (string, error) {
+
+	claims := jwt.MapClaims{
+		"sub": payload,
+		"iat": time.Now().Unix(),
+	}
+
+	secretKey := viper.GetString("secretKey")
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(secretKey))
+
+	if err != nil {
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func GetWriteKeyPayload(writeKey string) (WriteKeyPayloadT, error) {
+
+	token, err := jwt.ParseWithClaims(writeKey, &WriteKeyTokenClaimsT{}, func(token *jwt.Token) (interface{}, error) {
+		secretKey := viper.GetString("secretKey")
+		return []byte(secretKey), nil
+	})
+
+	if err != nil {
+		return WriteKeyPayloadT{}, err
+	}
+
+	if !token.Valid {
+		return WriteKeyPayloadT{}, errors.New("Invalid token")
+	}
+
+	claims, ok := token.Claims.(*WriteKeyTokenClaimsT)
+	if !ok {
+		return WriteKeyPayloadT{}, errors.New("Invalid claims format")
+	}
+
+	return claims.Sub, nil
 }

@@ -107,3 +107,16 @@ type DestinationConnectionsT struct {
 	DestinationDetail		DestinationDetailT			`json:"destination_detail"`
 	SourceDetails			[]SourceDetailT				`json:"source_details`
 }
+
+type ConnectionInstanceT struct {
+	ID				int				`json:"id"`
+	SourceID		int				`json:"source_id"`
+	DestinationID	int				`json:"destination_id"`
+	Transforms		string			`json:"transforms"`
+}
+
+type ConnectionDetailT struct {
+	Connection			ConnectionInstanceT	`json:"connection"`
+	SourceDetail		SourceDetailT		`json:"source_detail"`
+	DestinationDetail	DestinationDetailT	`json:"destination_detail"`
+}
