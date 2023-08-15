@@ -1,46 +1,41 @@
 ---
-database:
-  host: localhost
-  user: kassette_user
+ database:
+  host: kassette-server-postgresql-hl
   name: kassette
   password: password
-  port: 5430
+  port: 5432
   ssl_mode: disable
-
+  user: kassette_user
 gateway:
-  webPort: 8080
-  maxBatchSize: 32
+  allowReqsWithoutUserIDAndAnonymousID: true
   batchTimeoutInMS: 2000
+  maxBatchSize: 32
   maxDBWriterProcess: 4
   maxReqSizeInKB: 1000000
   maxWebReqQSize: 1
-  allowReqsWithoutUserIDAndAnonymousID: true
-
+  webPort: 8080
+logLevel: INFO
 router:
   jobQueryBatchSize: 10
-  updateStatusBatchSize: 10
-  readSleep: 100
-  noOfWorkers: 4
-  noOfJobsPerChannel: 10
-  ser: 10
-  maxSleep: 100
-  minSleep: 10
-  maxStatusUpdateWait: 10
-  randomWorkerAssign: true
   keepOrderOnFailure: false
-  useTestSink: false
-  maxFailedCountForJob: 10
+  maxFailedCountForJob: 3
+  maxSleep: 100
+  maxStatusUpdateWait: 10
+  minSleep: 10
+  noOfJobsPerChannel: 10
+  noOfWorkers: 4
+  randomWorkerAssign: true
+  readSleep: 100
+  ser: 10
   testSinkURL: http://localhost:8080/testSink
-
+  updateStatusBatchSize: 10
+  useTestSink: false
+serverPort: 8088
 warehouse:
-  host: localhost
-  user: kassette_user
+  host: kassette-server-postgresql-hl
   name: warehouse
   password: password
-  port: 5429
+  port: 5432
   ssl_mode: disable
-
-logLevel: INFO
-serverPort: 8088
-
-secretKey: KassetteAIJimCollins
+  user: kassette_user
+  

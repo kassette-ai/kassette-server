@@ -4,18 +4,16 @@ import (
 	"os"
 	"io"
 	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"time"
-	"errors"
 	"github.com/bugsnag/bugsnag-go"
 	"github.com/google/uuid"
-	"github.com/dgrijalva/jwt-go"
-	"github.com/spf13/viper"
 	"reflect"
 	"runtime/debug"
 	"strings"
 	"mime/multipart"
+	"kassette.ai/kassette-server/utils/logger"
 )
 
 const (
@@ -25,13 +23,12 @@ const (
 )
 
 type WriteKeyPayloadT struct {
-	CustomerID			int				`json:"customer_id"`
-	SourceID			int				`json:"source_id"`
+	CustomerName			string				`json:"customer_name"`
+	SecretKey				string				`json:"secret_key"`
 }
 
-type WriteKeyTokenClaimsT struct {
-	Sub					WriteKeyPayloadT	`json:"sub"`
-	jwt.StandardClaims
+func (wk WriteKeyPayloadT) Combine() string {
+	return wk.CustomerName + "_" + wk.SecretKey
 }
 
 func GetTagName(id string, names ...string) string {
@@ -294,44 +291,12 @@ func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) 
 }
 
 //Generate a jwt token
-func GenerateWriteKey(payload WriteKeyPayloadT) (string, error) {
-
-	claims := jwt.MapClaims{
-		"sub": payload,
-		"iat": time.Now().Unix(),
-	}
-
-	secretKey := viper.GetString("secretKey")
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(secretKey))
-
-	if err != nil {
-		return "", err
-	}
-
-	return signedToken, nil
+func GenerateWriteKey(payload WriteKeyPayloadT) string {
+	logger.Info(fmt.Sprintf("Payload_string: %s", payload.Combine()))
+	hash := md5.Sum([]byte(payload.Combine()))
+	return hex.EncodeToString(hash[:])
 }
 
 func GetWriteKeyPayload(writeKey string) (WriteKeyPayloadT, error) {
-
-	token, err := jwt.ParseWithClaims(writeKey, &WriteKeyTokenClaimsT{}, func(token *jwt.Token) (interface{}, error) {
-		secretKey := viper.GetString("secretKey")
-		return []byte(secretKey), nil
-	})
-
-	if err != nil {
-		return WriteKeyPayloadT{}, err
-	}
-
-	if !token.Valid {
-		return WriteKeyPayloadT{}, errors.New("Invalid token")
-	}
-
-	claims, ok := token.Claims.(*WriteKeyTokenClaimsT)
-	if !ok {
-		return WriteKeyPayloadT{}, errors.New("Invalid claims format")
-	}
-
-	return claims.Sub, nil
+	return WriteKeyPayloadT{}, nil
 }

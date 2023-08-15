@@ -70,13 +70,15 @@ type ServiceCatalogueT struct {
 }
 
 type SourceInstanceT struct {
-	ID			int				`json:"id"`
-	Name		string			`json:"name"`
-	ServiceID	int				`json:"service_id"`
-	WriteKey	string			`json:"write_key"`
-	CustomerID 	int				`json:"customer_id"`
-	Config		string			`json:"config"`
-	Status		string			`json:"status"`
+	ID				int				`json:"id"`
+	Name			string			`json:"name"`
+	ServiceID		int				`json:"service_id"`
+	WriteKey		string			`json:"write_key"`
+	CustomerID 		int				`json:"customer_id"`
+	CustomerName	string			`json:"customer_name"`
+	SecretKey		string			`json:"secret_key"`
+	Config			string			`json:"config"`
+	Status			string			`json:"status"`
 }
 
 type DestinationInstanceT struct {

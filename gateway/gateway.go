@@ -299,22 +299,35 @@ func (gateway *HandleT) startWebHandler() {
 
 	r.POST("/source", func(c* gin.Context) {
 		var source backendconfig.SourceInstanceT
+		var writeKeyPayload misc.WriteKeyPayloadT
+
 		err := c.BindJSON(&source)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error occured while unmarshaling json data. Error: %s", err.Error()))
 			c.JSON(http.StatusBadRequest, err.Error())
+			return
 		}
 
-		writeKey, success := gateway.configDB.CreateNewSource(source)
-		c.JSON(http.StatusOK, gin.H{"success": success, "write_key": writeKey})
+		writeKeyPayload.CustomerName = source.CustomerName
+		writeKeyPayload.SecretKey = source.SecretKey
+		source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)
+
+		success := gateway.configDB.CreateNewSource(source)
+		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
 	r.PATCH("/source", func(c* gin.Context) {
 		var source backendconfig.SourceInstanceT
+		var writeKeyPayload misc.WriteKeyPayloadT
 		err := c.BindJSON(&source)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		}
+
+		writeKeyPayload.CustomerName = source.CustomerName
+		writeKeyPayload.SecretKey = source.SecretKey
+		source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)
+
 		success := gateway.configDB.UpdateSource(source)
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
@@ -430,25 +443,19 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.GET("/source-config", func(c* gin.Context) {
-		writeKey := c.Query("writeKey")
-		customerID_str := c.Query("customerID")
-		customerID, err := strconv.Atoi(customerID_str)
+	r.POST("/authenticate", func(c* gin.Context) {
+		var payload misc.WriteKeyPayloadT
+		c.BindJSON(&payload)
+		hashValue := misc.GenerateWriteKey(payload)
+		passed, err := gateway.configDB.Authenticate(hashValue)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
 		} else {
-			writeKeyPayload, err := misc.GetWriteKeyPayload(writeKey)
-			if err != nil{
-				c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
+			if passed {
+				c.JSON(http.StatusOK, gin.H{"Status": "Authentication Passed"})
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"Status": "No matched source instance!"})
 			}
-			if writeKeyPayload.CustomerID != customerID {
-				c.JSON(http.StatusBadRequest, gin.H{"Error": "Token and customer id is not matched!"})
-			}
-			source, err := gateway.configDB.GetSourceByID(writeKeyPayload.SourceID)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"Error": err.Error()})
-			}
-			c.JSON(http.StatusOK, source.Config)
 		}
 	})
 
