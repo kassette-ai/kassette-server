@@ -13,7 +13,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"mime/multipart"
-	"kassette.ai/kassette-server/utils/logger"
 )
 
 const (
@@ -292,7 +291,6 @@ func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) 
 
 //Generate a jwt token
 func GenerateWriteKey(payload WriteKeyPayloadT) string {
-	logger.Info(fmt.Sprintf("Payload_string: %s", payload.Combine()))
 	hash := md5.Sum([]byte(payload.Combine()))
 	return hex.EncodeToString(hash[:])
 }

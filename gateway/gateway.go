@@ -35,7 +35,8 @@ var (
 	webPort, maxBatchSize, maxDBWriterProcess int
 	batchTimeout                              time.Duration
 	respMessage                               string
-	enabledWriteKeysSourceMap                 map[string]string
+	enabledWriteKeysSourceMap                 map[string]int
+	connectionsMap				  			  map[string][]int
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
 
@@ -133,19 +134,16 @@ func (gateway *HandleT) webRequestBatcher() {
 		select {
 		case req := <-gateway.webRequestQ:
 			logger.Info("Received web request")
-			//Append to request buffer
 			reqBuffer = append(reqBuffer, req)
 			if len(reqBuffer) == maxBatchSize {
 				breq := batchWebRequestT{batchRequest: reqBuffer}
 				gateway.batchRequestQ <- &breq
-				reqBuffer = nil
 				reqBuffer = make([]*webRequestT, 0)
 			}
 		case <-time.After(batchTimeout):
 			if len(reqBuffer) > 0 {
 				breq := batchWebRequestT{batchRequest: reqBuffer}
 				gateway.batchRequestQ <- &breq
-				reqBuffer = nil
 				reqBuffer = make([]*webRequestT, 0)
 			}
 		}
@@ -158,11 +156,15 @@ func backendConfigSubscriber() {
 	for {
 		config := <-ch
 		configSubscriberLock.Lock()
-		enabledWriteKeysSourceMap = map[string]string{}
-		sources := config.Data.(backendconfig.SourcesT)
-		for _, source := range sources.Sources {
-			if source.Enabled {
+		enabledWriteKeysSourceMap = map[string]int{}
+		connectionsMap = map[string][]int{}
+		detail := config.Data.(backendconfig.ConnectionDetailsT)
+		for _, conn := range detail.Connections {
+			source := conn.SourceDetail.Source
+			connection := conn.Connection
+			if source.Enabled() {
 				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
+				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
 			}
 		}
 		configSubscriberLock.Unlock()
@@ -195,36 +197,16 @@ func (gateway *HandleT) startWebHandler() {
 	logger.Info("Starting web handler")
 
 	r := gin.Default()
-	r.Static("/static", "./static")
 	r.Use(gin.Recovery())
 	r.Use(cors.Default())
+	r.Static("/static", "./static")
 
-	//r.POST("/web", webPageHandler)
 	r.POST("/extract", gateway.extractHandler)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
 		})
-	})
-
-	r.GET("/config", func(c *gin.Context) {
-		c.JSON(http.StatusOK, backendconfig.GetConfig())
-	})
-
-	r.POST("/config", func(c *gin.Context) {
-
-		var config backendconfig.SourceT
-		err := c.BindJSON(&config)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"response": "invalid JSON",
-			})
-			return
-		}
-		gateway.configDB.Update(config, config.WriteKey)
-
-		c.JSON(http.StatusOK, backendconfig.GetConfig())
 	})
 
 	r.GET("/service-catalogue", func(c *gin.Context) {
@@ -490,12 +472,19 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {
-		logger.Error("Error getting payload and write key")
+		logger.Error(fmt.Sprintf("Error getting payload and write key. Error: %s", err.Error()))
 		return
 	}
 
 	done := make(chan string, 1)
-	req := webRequestT{done: done, reqType: reqType, requestPayload: payload, writeKey: writeKey, ipAddr: c.Request.RemoteAddr, userIDHeader: c.Request.Header.Get("X-User-ID")}
+	req := webRequestT{
+		done: done,
+		reqType: reqType,
+		requestPayload: payload,
+		writeKey: writeKey,
+		ipAddr: c.Request.RemoteAddr,
+		userIDHeader: c.Request.Header.Get("X-User-ID"),
+	}
 	gateway.webRequestQ <- &req
 
 	// TODO: Should wait here until response is processed
@@ -511,14 +500,21 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 }
 
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
-	//var err error
-	//writeKey, _, ok := r.BasicAuth()
-	//sourceID := gateway.getSourceIDForWriteKey(writeKey)
-	//if !ok {
-	//	println("Basic auth failed")
-	//}
+	var err error
+	var writeKeyPayload misc.WriteKeyPayloadT
+	writeKeyPayload.CustomerName = r.Header.Get("Kassette-Customer-Name")
+	writeKeyPayload.SecretKey = r.Header.Get("Kassette-Secret-Key")
+	writeKey := misc.GenerateWriteKey(writeKeyPayload)
+	passed, err := gateway.configDB.Authenticate(writeKey)
 
-	writeKey := "camunda"
+	if err != nil {
+		return []byte{}, "", nil
+	}
+
+	if !passed {
+		return []byte{}, "", errors.New("No valid writeKey")
+	}
+
 	payload, err := gateway.getPayloadFromRequest(r)
 	if err != nil {
 		logger.Error("Error getting payload from request with source: " + writeKey)
@@ -933,28 +929,14 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 		//Using this to send event schema to the config backend.
 		var events []string
 		for _, req := range breq.batchRequest {
-
 			if req.requestPayload == nil {
 				req.done <- "Request body is nil"
 				preDbStoreCount++
 				continue
 			}
 			body := req.requestPayload
-
-			writeKey := "write_key"
-			logger.Info(fmt.Sprint("hard coded writeKey: ", writeKey))
-
-			// set anonymousId if not set in payload
-			var index int
-			result := gjson.GetBytes(body, "batch")
-			newAnonymousID := uuid.New().String()
-			result.ForEach(func(_, _ gjson.Result) bool {
-				if !gjson.GetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index)).Exists() {
-					body, _ = sjson.SetBytes(body, fmt.Sprint(`batch.%v.anonymousId`, index), newAnonymousID)
-				}
-				index++
-				return true // keep iterating
-			})
+			writeKey := req.writeKey
+			ipAddr := req.ipAddr
 
 			if req.reqType != "batch" {
 				body, _ = sjson.SetBytes(body, "type", req.reqType)
@@ -963,21 +945,33 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 
 			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
 			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
-			events = append(events, fmt.Sprint("%s", body))
+			body, _ = sjson.SetBytes(body, "requestIP", ipAddr)
+			events = append(events, fmt.Sprintf("%s", body))
 
-			id := uuid.New()
 			//Should be function of body
-			newJob := jobsdb.JobT{
-				UUID:         id,
-				Parameters:   []byte(fmt.Sprintf(`{"source_id": "%v"}`, enabledWriteKeysSourceMap[writeKey])),
-				CreatedAt:    time.Now(),
-				ExpireAt:     time.Now(),
-				CustomVal:    CustomVal,
-				EventPayload: body,
+			for _, connectionID := range connectionsMap[writeKey] {
+
+				// set anonymousId if not set in payload
+				newAnonymousID := uuid.New().String()
+				batchReqs := gjson.GetBytes(body, "batch")
+				batchReqs.ForEach(func(index, req gjson.Result) bool {
+					body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
+					return true // keep iterating
+				})
+
+				id := uuid.New()
+				newJob := jobsdb.JobT{
+					UUID:         id,
+					Parameters:   []byte(fmt.Sprintf(`{"connection_id": %v}`, connectionID)),
+					CreatedAt:    time.Now(),
+					ExpireAt:     time.Now(),
+					CustomVal:    CustomVal,
+					EventPayload: body,
+				}
+				jobList = append(jobList, &newJob)	
+				jobIDReqMap[newJob.UUID] = req
+				jobWriteKeyMap[newJob.UUID] = writeKey
 			}
-			jobList = append(jobList, &newJob)
-			jobIDReqMap[newJob.UUID] = req
-			jobWriteKeyMap[newJob.UUID] = writeKey
 		}
 
 		errorMessagesMap, _ := gateway.jobsDB.Store(jobList)

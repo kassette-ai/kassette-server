@@ -3,10 +3,9 @@ package processor
 import (
 	"context"
 	"fmt"
-	jsoniter "github.com/json-iterator/go"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/utils/logger"
-	"sort"
+	//"sort"
 	"sync"
 )
 
@@ -55,18 +54,14 @@ const (
 	TransformerRequestFailure = 909
 )
 
-var jsonfast = jsoniter.ConfigCompatibleWithStandardLibrary
-
 type Transformer interface {
 	Setup()
 	Transform(ctx context.Context, clientEvents []TransformerEventT, url string, batchSize int) ResponseT
-	Validate(clientEvents []TransformerEventT, url string, batchSize int) ResponseT
 }
 
 type ResponseT struct {
 	Events       []interface{}
 	Success      bool
-	SourceIDList []string
 }
 
 type TransformerEventT struct {
@@ -110,13 +105,9 @@ func (trans *transformerHandleT) transformWorker() {
 
 	//batching payload
 	for job := range trans.requestQ {
-		logger.Info("9")
-
 		reqArray := job.data.([]interface{})
 		respArray := transformBatchPayload(reqArray)
-
 		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
-		logger.Info("10")
 	}
 }
 
@@ -219,103 +210,95 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{},
 
 	logger.Info("Transform!!!!")
 
-	trans.accessLock.Lock()
-	defer trans.accessLock.Unlock()
+	// trans.accessLock.Lock()
+	// defer trans.accessLock.Unlock()
 
-	var transformResponse = make([]*transformMessageT, 0)
-	//Enqueue all the jobs
-	inputIdx := 0
-	outputIdx := 0
-	totalSent := 0
-	reqQ := trans.requestQ
-	resQ := trans.responseQ
+	// var transformResponse = make([]*transformMessageT, 0)
+	// //Enqueue all the jobs
+	// inputIdx := 0
+	// outputIdx := 0
+	// totalSent := 0
+	// reqQ := trans.requestQ
+	// resQ := trans.responseQ
 
-	var toSendData interface{}
-	var sourceIDList []string
-	for _, clientEvent := range clientEvents {
-		sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["source_id"].(string))
-	}
+	// var toSendData interface{}
+	// var sourceIDList []string
+	// for _, clientEvent := range clientEvents {
+	// 	sourceIDList = append(sourceIDList, clientEvent.(map[string]interface{})["source_id"].(string))
+	// }
 
-	for {
-		//The channel is still live and the last batch has been sent
-		//Construct the next batch
-		if reqQ != nil && toSendData == nil {
-			if batchSize > 0 {
-				clientBatch := make([]interface{}, 0)
-				batchCount := 0
-				for {
-					if batchCount >= batchSize || inputIdx >= len(clientEvents) {
-						break
-					}
-					clientBatch = append(clientBatch, clientEvents[inputIdx])
-					batchCount++
-					inputIdx++
-				}
-				toSendData = clientBatch
+	// for {
+	// 	//The channel is still live and the last batch has been sent
+	// 	//Construct the next batch
+	// 	if reqQ != nil && toSendData == nil {
+	// 		if batchSize > 0 {
+	// 			clientBatch := make([]interface{}, 0)
+	// 			batchCount := 0
+	// 			for {
+	// 				if batchCount >= batchSize || inputIdx >= len(clientEvents) {
+	// 					break
+	// 				}
+	// 				clientBatch = append(clientBatch, clientEvents[inputIdx])
+	// 				batchCount++
+	// 				inputIdx++
+	// 			}
+	// 			toSendData = clientBatch
 
-			} else {
-				toSendData = clientEvents[inputIdx]
+	// 		} else {
+	// 			toSendData = clientEvents[inputIdx]
 
-				inputIdx++
-			}
-		}
+	// 			inputIdx++
+	// 		}
+	// 	}
 
-		logger.Info("8")
+	// 	select {
+	// 	//In case of batch event, index is the next Index
+	// 	case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, url: url}:
+	// 		totalSent++
+	// 		toSendData = nil
+	// 		if inputIdx == len(clientEvents) {
+	// 			reqQ = nil
+	// 		}
+	// 	case data := <-resQ:
+	// 		transformResponse = append(transformResponse, data)
+	// 		outputIdx++
+	// 		//If all was sent and all was received we are done
+	// 		if reqQ == nil && outputIdx == totalSent {
+	// 			resQ = nil
+	// 		}
+	// 	}
+	// 	if reqQ == nil && reqQ != nil && len(reqQ) == 0 {
+	// 		break
+	// 	}
 
-		select {
-		//In case of batch event, index is the next Index
-		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, url: url}:
-			totalSent++
-			toSendData = nil
-			if inputIdx == len(clientEvents) {
-				reqQ = nil
-			}
-			logger.Info("11")
-		case data := <-resQ:
-			transformResponse = append(transformResponse, data)
-			outputIdx++
-			//If all was sent and all was received we are done
-			if reqQ == nil && outputIdx == totalSent {
-				resQ = nil
-			}
-			logger.Info("12")
-		}
-		if reqQ == nil && reqQ != nil && len(reqQ) == 0 {
-			break
-		}
+	// 	if reqQ == nil && resQ == nil {
+	// 		break
+	// 	}
+	// }
 
-		if reqQ == nil && resQ == nil {
-			logger.Info("13")
-			break
-		}
-	}
+	// logger.Info(fmt.Sprintf("Sort events"))
 
-	logger.Info("14")
+	// //Sort the responses in the same order as input
+	// sort.Slice(transformResponse, func(i, j int) bool {
+	// 	return transformResponse[i].index < transformResponse[j].index
+	// })
 
-	logger.Info(fmt.Sprintf("Sort events"))
+	// outClientEvents := make([]interface{}, 0)
+	// var outClientEventsSourceIDs []string
 
-	//Sort the responses in the same order as input
-	sort.Slice(transformResponse, func(i, j int) bool {
-		return transformResponse[i].index < transformResponse[j].index
-	})
+	// for idx, resp := range transformResponse {
+	// 	if resp.data == nil {
+	// 		continue
+	// 	}
 
-	outClientEvents := make([]interface{}, 0)
-	var outClientEventsSourceIDs []string
+	// 	outClientEvents = append(outClientEvents, resp.data)
+	// 	outClientEventsSourceIDs = append(outClientEventsSourceIDs, sourceIDList[idx])
 
-	for idx, resp := range transformResponse {
-		if resp.data == nil {
-			continue
-		}
-
-		outClientEvents = append(outClientEvents, resp.data)
-		outClientEventsSourceIDs = append(outClientEventsSourceIDs, sourceIDList[idx])
-
-	}
+	// }
 
 	return ResponseT{
-		Events:       outClientEvents,
+		Events:       clientEvents,
 		Success:      true,
-		SourceIDList: outClientEventsSourceIDs,
 	}
 }
 

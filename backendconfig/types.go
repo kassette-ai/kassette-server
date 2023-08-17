@@ -1,5 +1,9 @@
 package backendconfig
 
+import (
+	"database/sql"
+)
+
 type SourceT struct {
 	ID               string                 `json:"id"`
 	Name             string                 `json:"sourceName"`
@@ -56,6 +60,41 @@ type TransformationT struct {
 	Config    map[string]interface{}
 }
 
+/*---- Type definitions for the new structure ----*/
+
+var SourceStatus, DestinationStatus	map[string]string
+
+func init() {
+	SourceStatus = map[string]string{
+		"ENABLED": "enabled",
+		"DISABLED": "disabled",
+	}
+	DestinationStatus = map[string]string{
+		"ENABLED": "enabled",
+		"DISABLED": "disabled",
+	}
+}
+
+func (source SourceInstanceT) Enabled() bool {
+	return source.Status == SourceStatus["ENABLED"]
+}
+
+func (source SourceInstanceT) Disabled() bool {
+	return source.Status == SourceStatus["DISABLED"]
+}
+
+func (dest DestinationInstanceT) Enabled() bool {
+	return dest.Status == DestinationStatus["ENABLED"]
+}
+
+func (dest DestinationInstanceT) Disabled() bool {
+	return dest.Status == DestinationStatus["DISABLED"]
+}
+
+type HandleT struct {
+	dbHandle        *sql.DB
+	destinationList []DestinationT
+}
 
 type ServiceCatalogueT struct {
 	ID 			int				`json:"id"`
@@ -121,4 +160,8 @@ type ConnectionDetailT struct {
 	Connection			ConnectionInstanceT	`json:"connection"`
 	SourceDetail		SourceDetailT		`json:"source_detail"`
 	DestinationDetail	DestinationDetailT	`json:"destination_detail"`
+}
+
+type ConnectionDetailsT struct {
+	Connections []ConnectionDetailT `json:"connections"`
 }

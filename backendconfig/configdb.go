@@ -2,7 +2,6 @@ package backendconfig
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"reflect"
@@ -16,17 +15,13 @@ import (
 var (
 	configBackendURL, configBackendToken string
 	pollInterval                         time.Duration
-	curSourceJSON                        SourcesT
+	curSourceJSON                        ConnectionDetailsT
 	initialized                          bool
 )
 
 var (
 	Eb *utils.EventBus
 )
-
-type SourcesT struct {
-	Sources []SourceT `json:"sources"`
-}
 
 func loadConfig() {
 	pollInterval = 5 * time.Second
@@ -36,52 +31,13 @@ func init() {
 	loadConfig()
 }
 
-func (cd *HandleT) pollConfigUpdate() {
-	for {
-		sourceJSON, ok := cd.getAllConfiguredSources()
-
-		if ok && !reflect.DeepEqual(curSourceJSON, sourceJSON) {
-			curSourceJSON = sourceJSON
-			initialized = true
-			Eb.Publish("backendconfig", sourceJSON)
-		}
-		time.Sleep(pollInterval)
-	}
-}
-
-func GetConfig() SourcesT {
+func GetConfig() ConnectionDetailsT {
 	return curSourceJSON
 }
 
 func Subscribe(channel chan utils.DataEvent) {
 	Eb.Subscribe("backendconfig", channel)
 	Eb.PublishToChannel(channel, "backendconfig", curSourceJSON)
-}
-
-func (cd *HandleT) Update(t SourceT, write_key string) {
-	if cd.insertSource(write_key, t) {
-		newSourceJSON, _ := json.Marshal(t)
-		Eb.Publish("backendConfig", newSourceJSON)
-	}
-}
-
-func WaitForConfig() {
-	for {
-		if initialized {
-			break
-		}
-		time.Sleep(pollInterval)
-	}
-}
-
-// Setup backend config
-func (cd *HandleT) Init() {
-	Eb = new(utils.EventBus)
-	logger.Info("Initializing backend config")
-
-	cd.Setup()
-	initialized = true
-	go cd.pollConfigUpdate()
 }
 
 func GetConnectionString() string {
@@ -94,11 +50,12 @@ func GetConnectionString() string {
 		viper.GetString("database.name"))
 }
 
-type HandleT struct {
-	dbHandle        *sql.DB
-	destinationList []DestinationT
-	sourceList      []SourceT
-	configList      SourcesT
+// Setup backend config
+func (cd *HandleT) Init() {
+	Eb = new(utils.EventBus)
+
+	logger.Info("Initializing backend config")
+	cd.Setup()
 }
 
 func (cd *HandleT) Setup() {
@@ -113,68 +70,28 @@ func (cd *HandleT) Setup() {
 		log.Fatal("Failed to open DB connection", err)
 	}
 
-	cd.createConfigTable()
-	cd.createServiceCatalogueTable()
-	cd.createSourceTable()
-	cd.createDestinationTable()
-	cd.createConnectionTable()
+	cd.CreateServiceCatalogueTable()
+	cd.CreateSourceTable()
+	cd.CreateDestinationTable()
+	cd.CreateConnectionTable()
+
+	go cd.PollConfigUpdate()
 }
 
-func (cd *HandleT) getAllConfiguredSources() (sourceJSON SourcesT, ok bool) {
-
-	sqlStatement := fmt.Sprintf(`SELECT id, source, write_key FROM source_config`)
-	result, _ := cd.dbHandle.Prepare(sqlStatement)
-
-	defer result.Close()
-
-	rows, err := result.Query()
-
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to read source_config table: %s", err.Error()))
-		return
-	}
-	defer rows.Close()
-
-	var sourceConfig SourcesT
-
-	for rows.Next() {
-		var id int
-		var sourceString string
-		var source SourceT
-		var writeKey string
-
-		err = rows.Scan(&id, &sourceString, &writeKey)
-
-		json.Unmarshal([]byte(sourceString), &source)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to read source_config table: %s", err.Error()))
+func (cd *HandleT) PollConfigUpdate() {
+	for {
+		var newSourceJSON ConnectionDetailsT
+		newSourceJSON.Connections = cd.GetAllConnections()
+		if !reflect.DeepEqual(curSourceJSON, newSourceJSON) {
+			initialized = true
+			curSourceJSON = newSourceJSON
+			Eb.Publish("backendconfig", newSourceJSON)
 		}
-		sourceConfig.Sources = append(sourceConfig.Sources, source)
+		time.Sleep(pollInterval)
 	}
-
-	return sourceConfig, true
 }
 
-func (cd *HandleT) createConfigTable() {
-
-	var err error
-
-	sqlStatement := fmt.Sprintf(
-		`CREATE TABLE IF NOT EXISTS source_config (
-		id BIGSERIAL PRIMARY KEY,
-		source JSONB NOT NULL,
-		write_key VARCHAR(255) NOT NULL);`)
-
-	_, err = cd.dbHandle.Exec(sqlStatement)
-
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to create source_config table %s", err))
-	}
-
-	return
-}
-
-func (cd *HandleT) createServiceCatalogueTable() {
+func (cd *HandleT) CreateServiceCatalogueTable() {
 
 	sqlStatement := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS service_catalogue (
@@ -197,7 +114,7 @@ func (cd *HandleT) createServiceCatalogueTable() {
 	return
 }
 
-func (cd *HandleT) createSourceTable() {
+func (cd *HandleT) CreateSourceTable() {
 
 	sqlStatement := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS source (
@@ -218,7 +135,7 @@ func (cd *HandleT) createSourceTable() {
 	return
 }
 
-func (cd *HandleT) createDestinationTable() {
+func (cd *HandleT) CreateDestinationTable() {
 
 	sqlStatement := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS destination (
@@ -238,7 +155,7 @@ func (cd *HandleT) createDestinationTable() {
 	return
 }
 
-func (cd *HandleT) createConnectionTable() {
+func (cd *HandleT) CreateConnectionTable() {
 
 	sqlStatement := fmt.Sprintf(
 		`CREATE TABLE IF NOT EXISTS connection (
@@ -254,25 +171,6 @@ func (cd *HandleT) createConnectionTable() {
 	}
 
 	return
-}
-
-func (cd *HandleT) insertSource(writeKey string, source SourceT) bool {
-
-	var err error
-
-	sourceJson, _ := json.Marshal(source)
-
-	sqlStatement := fmt.Sprintf(`INSERT INTO source_config (id, source, write_key) VALUES ('%s', '%s', '%s') 
-                                                  ON CONFLICT (ID) DO UPDATE SET source = '%s', write_key = '%s'`,
-		source.ID, sourceJson, writeKey, sourceJson, writeKey)
-
-	_, err = cd.dbHandle.Exec(sqlStatement)
-
-	if err != nil {	
-		logger.Error(fmt.Sprintf("Failed to insert to source_config table %s", err))
-		return false
-	}
-	return true
 }
 
 func (cd *HandleT) CreateNewServiceCatalogue(catalogue ServiceCatalogueT) bool {
@@ -415,36 +313,6 @@ func (cd *HandleT) GetSourceByID(ID int) (SourceInstanceT, error) {
 	}
 	
 	return source, nil
-}
-
-func (cd *HandleT) Authenticate(hashValue string) (bool, error) {
-	sqlStatement := fmt.Sprintf("SELECT count(*) from source where write_key = '%s'", hashValue)
-
-	logger.Info(sqlStatement)
-
-	rows, err := cd.dbHandle.Query(sqlStatement)
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch source from source table by ID. Error: %s", err))
-		return false, err
-	}
-	defer rows.Close()
-
-	count := 0
-
-	for rows.Next() {
-		err = rows.Scan(&count)
-
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to fetch source from source table by ID. Error: %s", err))
-			return false, err
-		}
-	}
-
-	if count == 1 {
-		return true, nil
-	} else {
-		return false, nil
-	}
 }
 
 func (cd *HandleT) GetSourceDetailByID(ID int) (SourceDetailT, error) {
@@ -683,4 +551,32 @@ func (cd* HandleT) DeleteConnection(connectionID int) bool {
 	}
 	
 	return true
+}
+
+func (cd *HandleT) Authenticate(hashValue string) (bool, error) {
+	sqlStatement := fmt.Sprintf("SELECT count(*) from source where write_key = '%s'", hashValue)
+
+	rows, err := cd.dbHandle.Query(sqlStatement)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Failed to fetch source from source table by ID. Error: %s", err))
+		return false, err
+	}
+	defer rows.Close()
+
+	count := 0
+
+	for rows.Next() {
+		err = rows.Scan(&count)
+
+		if err != nil {
+			logger.Error(fmt.Sprintf("Failed to fetch source from source table by ID. Error: %s", err))
+			return false, err
+		}
+	}
+
+	if count == 1 {
+		return true, nil
+	} else {
+		return false, nil
+	}
 }
