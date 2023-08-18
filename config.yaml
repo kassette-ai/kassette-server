@@ -1,5 +1,4 @@
----
- database:
+database:
   host: kassette-server-postgresql-hl
   name: kassette
   password: password
