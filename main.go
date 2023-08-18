@@ -58,7 +58,7 @@ func main() {
 	// warehouseDB.Init()
 	// warehouseDB.CreateDestTable()
 
-	routerDB.Setup(false, "rt", routerDBRetention, false, true)
+	routerDB.Setup(false, "rt", routerDBRetention, false, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false, false)
 
 	var processor processor.HandleT

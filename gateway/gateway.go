@@ -925,9 +925,6 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 		var jobIDReqMap = make(map[uuid.UUID]*webRequestT)
 		var jobWriteKeyMap = make(map[uuid.UUID]string)
 		var preDbStoreCount int
-		//Saving the event data read from req.request.Body to the splice.
-		//Using this to send event schema to the config backend.
-		var events []string
 		for _, req := range breq.batchRequest {
 			if req.requestPayload == nil {
 				req.done <- "Request body is nil"
@@ -938,40 +935,40 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 			writeKey := req.writeKey
 			ipAddr := req.ipAddr
 
+			newAnonymousID := uuid.New().String()
+			batchReqs := gjson.GetBytes(body, "batch")
+			batchReqs.ForEach(func(index, req gjson.Result) bool {
+				body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
+				return true // keep iterating
+			})
+
+			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
+			body, _ = sjson.SetBytes(body, "requestIP", ipAddr)
+			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
+
 			if req.reqType != "batch" {
 				body, _ = sjson.SetBytes(body, "type", req.reqType)
 				body, _ = sjson.SetRawBytes(batchEvent, "batch.0", body)
 			}
 
-			body, _ = sjson.SetBytes(body, "writeKey", writeKey)
-			body, _ = sjson.SetBytes(body, "receivedAt", time.Now().Format(time.RFC3339))
-			body, _ = sjson.SetBytes(body, "requestIP", ipAddr)
-			events = append(events, fmt.Sprintf("%s", body))
-
-			//Should be function of body
+			connectionIDStr := []string{}
 			for _, connectionID := range connectionsMap[writeKey] {
-
-				// set anonymousId if not set in payload
-				newAnonymousID := uuid.New().String()
-				batchReqs := gjson.GetBytes(body, "batch")
-				batchReqs.ForEach(func(index, req gjson.Result) bool {
-					body, _ = sjson.SetBytes(body, fmt.Sprintf(`batch.%v.anonymousId`, index), newAnonymousID)
-					return true // keep iterating
-				})
-
-				id := uuid.New()
-				newJob := jobsdb.JobT{
-					UUID:         id,
-					Parameters:   []byte(fmt.Sprintf(`{"connection_id": %v}`, connectionID)),
-					CreatedAt:    time.Now(),
-					ExpireAt:     time.Now(),
-					CustomVal:    CustomVal,
-					EventPayload: body,
-				}
-				jobList = append(jobList, &newJob)	
-				jobIDReqMap[newJob.UUID] = req
-				jobWriteKeyMap[newJob.UUID] = writeKey
+				connectionIDStr = append(connectionIDStr, fmt.Sprintf("%d", connectionID))
 			}
+
+			id := uuid.New()
+			newJob := jobsdb.JobT{
+				UUID:         id,
+				Parameters:   []byte(fmt.Sprintf(`{"connection_id": [%v]}`, strings.Join(connectionIDStr, ","))),
+				CreatedAt:    time.Now(),
+				ExpireAt:     time.Now(),
+				CustomVal:    CustomVal,
+				EventPayload: body,
+			}
+
+			jobList = append(jobList, &newJob)	
+			jobIDReqMap[newJob.UUID] = req
+			jobWriteKeyMap[newJob.UUID] = writeKey
 		}
 
 		errorMessagesMap, _ := gateway.jobsDB.Store(jobList)

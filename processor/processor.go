@@ -26,6 +26,7 @@ var (
 	sessionThresholdEvents int
 
 	configSubscriberLock   sync.RWMutex
+	configInitialized	   bool
 	connectionMap 		   map[int]backendconfig.ConnectionDetailT
 	rawDataDestinations    []string
 
@@ -63,6 +64,8 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 	proc.userPQItemMap = make(map[string]*pqItemT)
 	proc.userJobPQ = make(pqT, 0)
 
+	configInitialized = false
+
 	proc.transformer.Setup()
 
 	go backendConfigSubscriber()
@@ -77,6 +80,11 @@ func (proc *HandleT) Setup(gatewayDB *jobsdb.HandleT, routerDB *jobsdb.HandleT, 
 func (proc *HandleT) mainLoop() {
 
 	for {
+
+		if !configInitialized {
+			logger.Info("Backend Config is not initialised yet!")
+			continue
+		}
 
 		toQuery := 10
 
@@ -153,45 +161,49 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		}
 
 		requestIP := gjson.Get(string(batchEvent.EventPayload), "requestIP").Str
-		connectionID := int(gjson.Get(string(batchEvent.Parameters), "connection_id").Int())
+		connectionIDArr := gjson.Get(string(batchEvent.Parameters), "connection_id").Array()
 		receivedAt := gjson.Get(string(batchEvent.EventPayload), "receivedAt").Time()
 
 		if ok {
-			//Iterate through all the events in the batch
-			for _, singularEvent := range eventList {
-				//We count this as one, not destination specific ones
-				totalEvents++
-				//Getting all the destinations which are enabled for this
-				//event
-
+			for _, connectionIDResult := range connectionIDArr {
+				connectionID := int(connectionIDResult.Int())
+				configSubscriberLock.RLock()
 				connection := connectionMap[connectionID]
-				if connection.DestinationDetail.Destination.Disabled() {
+				configSubscriberLock.RUnlock()
+				if !connection.DestinationDetail.Destination.Enabled() {
 					logger.Info(fmt.Sprintf("Destination %v is disabled.", connection.DestinationDetail.Destination.ID))
 					continue
 				}
+				//Iterate through all the events in the batch
+				for _, singularEvent := range eventList {
+					//We count this as one, not destination specific ones
+					totalEvents++
+					//Getting all the destinations which are enabled for this
+					//event
 
-				shallowEventCopy := make(map[string]interface{})
-				singularEventMap, _ := singularEvent.(map[string]interface{})
+					shallowEventCopy := make(map[string]interface{})
+					singularEventMap, _ := singularEvent.(map[string]interface{})
 
-				// set timestamp skew based on timestamp fields from SDKs
-				originalTimestamp := getTimestampFromEvent(singularEventMap, "originalTimestamp")
-				sentAt := getTimestampFromEvent(singularEventMap, "sentAt")
+					// set timestamp skew based on timestamp fields from SDKs
+					originalTimestamp := getTimestampFromEvent(singularEventMap, "originalTimestamp")
+					sentAt := getTimestampFromEvent(singularEventMap, "sentAt")
 
-				shallowEventCopy["message"] = singularEventMap
-				shallowEventCopy["request_ip"] = requestIP
+					shallowEventCopy["message"] = singularEventMap
+					shallowEventCopy["request_ip"] = requestIP
 
-				// set all timestamps in RFC3339 format
-				shallowEventCopy["receivedAt"] = receivedAt.Format(time.RFC3339)
-				shallowEventCopy["originalTimestamp"] = originalTimestamp.Format(time.RFC3339)
-				shallowEventCopy["sentAt"] = sentAt.Format(time.RFC3339)
-				shallowEventCopy["timestamp"] = receivedAt.Add(-sentAt.Sub(originalTimestamp)).Format(time.RFC3339)
+					// set all timestamps in RFC3339 format
+					shallowEventCopy["receivedAt"] = receivedAt.Format(time.RFC3339)
+					shallowEventCopy["originalTimestamp"] = originalTimestamp.Format(time.RFC3339)
+					shallowEventCopy["sentAt"] = sentAt.Format(time.RFC3339)
+					shallowEventCopy["timestamp"] = receivedAt.Add(-sentAt.Sub(originalTimestamp)).Format(time.RFC3339)
 
-				//We have at-least one event so marking it good
-				_, ok = eventsByDest[connectionID]
-				if !ok {
-					eventsByDest[connectionID] = make([]interface{}, 0)
+					//We have at-least one event so marking it good
+					_, ok = eventsByDest[connectionID]
+					if !ok {
+						eventsByDest[connectionID] = make([]interface{}, 0)
+					}
+					eventsByDest[connectionID] = append(eventsByDest[connectionID], shallowEventCopy)
 				}
-				eventsByDest[connectionID] = append(eventsByDest[connectionID], shallowEventCopy)
 			}
 		} else {
 			logger.Info("Error parsing event batch, possible invalid event list (empty or not JSON)")
@@ -217,7 +229,9 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		//the JSON we can send to the destination
 
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
+		configSubscriberLock.RLock()
 		transformRule := connectionMap[connectionID].Connection.Transforms
+		configSubscriberLock.RUnlock()
 		response := proc.transformer.Transform(destEventList, transformRule, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
@@ -226,32 +240,30 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			logger.Error(fmt.Sprintf("Error in transformation for connection %v", connectionID))
 			continue
 		}
-		
-		//Save the JSON in DB. This is what the router uses
-		for _, destEvent := range destTransformEventList {
-			//We need to create a job for each destination
-			destEventJSON, err := json.Marshal(destEvent)
-			if err != nil {
-				logger.Error(fmt.Sprintf("Error marshalling transformed event %v", err))
-				continue
-			}
 
-			//Need to replace UUID his with messageID from client
-			id := uuid.New()
-			connectionID := 1
-			newJob := jobsdb.JobT{
-				UUID:         id,
-				Parameters:   []byte(fmt.Sprintf(`{"connection_id": "%v"}`, connectionID)),
-				CreatedAt:    time.Now(),
-				ExpireAt:     time.Now(),
-				CustomVal:    "",
-				EventPayload: destEventJSON,
-			}
-			if misc.Contains(rawDataDestinations, newJob.CustomVal) {
-				batchDestJobs = append(batchDestJobs, &newJob)
-			} else {
-				destJobs = append(destJobs, &newJob)
-			}
+		destEventJSON, err := json.Marshal(destTransformEventList)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error marshalling transformed event %v", err))
+			continue
+		}
+
+		//Need to replace UUID his with messageID from client
+		configSubscriberLock.RLock()
+		destination := connectionMap[connectionID].DestinationDetail.Destination
+		configSubscriberLock.RUnlock()
+		id := uuid.New()
+		newJob := jobsdb.JobT{
+			UUID:         id,
+			Parameters:   []byte(fmt.Sprintf(`{"destination_id": "%v"}`, destination.ID)),
+			CreatedAt:    time.Now(),
+			ExpireAt:     time.Now(),
+			CustomVal:    "",
+			EventPayload: destEventJSON,
+		}
+		if misc.Contains(rawDataDestinations, newJob.CustomVal) {
+			batchDestJobs = append(batchDestJobs, &newJob)
+		} else {
+			destJobs = append(destJobs, &newJob)
 		}
 	}
 
@@ -364,11 +376,12 @@ func backendConfigSubscriber() {
 		config := <-ch
 		configSubscriberLock.Lock()
 		detail := config.Data.(backendconfig.ConnectionDetailsT)
-		connectionMap := map[int]backendconfig.ConnectionDetailT{}
+		connectionMap = map[int]backendconfig.ConnectionDetailT{}
 		for _, conn := range detail.Connections {
 			connection := conn.Connection
 			connectionMap[connection.ID] = conn
 		}
+		configInitialized = true
 		configSubscriberLock.Unlock()
 	}
 }
