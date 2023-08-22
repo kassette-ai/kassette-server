@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"strconv"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
 )
@@ -18,6 +19,7 @@ func init() {
 	TransType = map[string]string{
 		"FIELDMAP": "field_map",
 		"FIELDHIDING": "field_hide",
+		"FIELDDELETING": "field_delete",
 	}
 	SystemTransformationRules = []TransformationRuleT{
 		{
@@ -42,6 +44,7 @@ type TransformationRuleT struct {
 	To			string		`json:"to"`
 	Field		string		`json:"field"`
 	Type		string		`json:"type"`
+	Value		string		`json:"value"`
 }
 
 type transformerHandleT struct {
@@ -77,7 +80,8 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT) map[str
 		rawPayload := rawMap["message"].(map[string]interface{})
 		transformedPayload := make(map[string]interface{})
 
-		for k, _ := range rawPayload {
+		delete := false
+		for k, v := range rawPayload {
 			fieldName := k
 			hide := false
 			for _, rule := range rules {
@@ -89,13 +93,32 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT) map[str
 					if rule.Field == k {
 						hide = true
 					}
+				} else if rule.Type == TransType["FIELDDELETING"] {
+					switch v.(type) {
+					case int:
+						vnum, err := strconv.Atoi(rule.Value)
+						if err == nil && vnum == v.(int) {
+							delete = true
+						}
+					case string:
+						if rule.Value == v.(string) {
+							delete = true
+						}
+					case bool:
+						if rule.Value == "true" && v.(bool) || rule.Value == "false" && !v.(bool) {
+							delete = true
+						}
+					}
+
 				}
 			}
 			if !hide {
 				transformedPayload[fieldName] = rawPayload[k]
 			}
 		}
-		batchPayload = append(batchPayload, transformedPayload)
+		if !delete {
+			batchPayload = append(batchPayload, transformedPayload)
+		}
 	}
 
 	// Converting to array to support PowerBi

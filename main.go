@@ -51,7 +51,7 @@ func main() {
 
 	configDB.Init()
 	gatewayDB.Setup(false, "gw", 0, false, false)
-	routerDB.Setup(false, "rt", routerDBRetention, false, true)
+	routerDB.Setup(false, "rt", routerDBRetention, false, false)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false, false)
 
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
