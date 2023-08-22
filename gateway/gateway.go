@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -502,8 +503,17 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
 	var err error
 	var writeKeyPayload misc.WriteKeyPayloadT
-	writeKeyPayload.CustomerName = r.Header.Get("Kassette-Customer-Name")
-	writeKeyPayload.SecretKey = r.Header.Get("Kassette-Secret-Key")
+	kassetteHeader := r.Header.Get("Kassette-Header")
+	decodedKassetteHeader, err := base64.StdEncoding.DecodeString(kassetteHeader)
+	if err != nil {
+		return []byte{}, "", errors.New("Not valid base64 encoded string")
+	}
+	splittedDecode := strings.SplitN(string(decodedKassetteHeader), ":", 2)
+	if len(splittedDecode) != 2 {
+		return []byte{}, "", errors.New("Not valid customer-key format")
+	}
+	writeKeyPayload.CustomerName = splittedDecode[0]
+	writeKeyPayload.SecretKey = splittedDecode[1]
 	writeKey := misc.GenerateWriteKey(writeKeyPayload)
 	passed, err := gateway.configDB.Authenticate(writeKey)
 

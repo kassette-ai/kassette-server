@@ -62,7 +62,7 @@ type TransformationT struct {
 
 /*---- Type definitions for the new structure ----*/
 
-var SourceStatus, DestinationStatus	map[string]string
+var SourceStatus, DestinationStatus, DestAccessType	map[string]string
 
 func init() {
 	SourceStatus = map[string]string{
@@ -72,6 +72,10 @@ func init() {
 	DestinationStatus = map[string]string{
 		"ENABLED": "enabled",
 		"DISABLED": "disabled",
+	}
+	DestAccessType = map[string]string {
+		"DBPOLLING": "DBPolling",
+		"RESTAPI": "Rest",
 	}
 }
 
