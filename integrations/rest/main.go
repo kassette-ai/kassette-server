@@ -18,6 +18,10 @@ type HandleT struct {
 	Client			*http.Client
 }
 
+type BatchPayloadT struct {
+	Payload			[]interface{}		`json:"payload"`
+}
+
 func (handle *HandleT) getFullUrl() string {
 	if handle.Query == "" {
 		return handle.Url
@@ -86,14 +90,23 @@ func (handle *HandleT) Init(config string) bool {
 }
 
 func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
-	req, err := http.NewRequest(handle.Method, handle.getFullUrl(), bytes.NewBuffer(payload))
+	var BatchPayloadMapList []BatchPayloadT
+	payloads := []interface{}{}
+	json.Unmarshal(payload, &BatchPayloadMapList)
+	for _, batchPayload := range BatchPayloadMapList {
+		payloads = append(payloads, batchPayload.Payload...)
+	}
+	payloadData, _ := json.Marshal(&payloads)
+	logger.Info(fmt.Sprintf("Payload data: %s", payloadData))
+	req, err := http.NewRequest(handle.Method, handle.getFullUrl(), bytes.NewBuffer(payloadData))
 	logger.Info(fmt.Sprintf("Full Url: %s", handle.getFullUrl()))
 	if err != nil {
 		return 500, []byte(fmt.Sprintf(`{"error": %s}`, err.Error()))
 	}
-	// for v, k := range handle.Header {
-	// 	req.Header.Add(k, v)
-	// }
+	
+	for k, v := range handle.Header {
+		req.Header.Add(k, v)
+	}
 
 	resp, err := handle.Client.Do(req)
 	if err != nil {
