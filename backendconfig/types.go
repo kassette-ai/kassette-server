@@ -75,7 +75,7 @@ func init() {
 	}
 	DestAccessType = map[string]string {
 		"DBPOLLING": "DBPolling",
-		"RESTAPI": "Rest",
+		"REST": "Rest",
 	}
 }
 

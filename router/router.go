@@ -5,10 +5,12 @@ import (
 	"time"
 	"sort"
 	"sync"
+	"strconv"
 	"encoding/json"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/rest"
 	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/utils"
 	"github.com/tidwall/gjson"
@@ -50,8 +52,14 @@ type DBHandleI interface{
 	InsertPayloadInTransaction([]json.RawMessage) error
 }
 
+type RestHandleI interface{
+	Init(string) bool
+	Send(json.RawMessage) (int, json.RawMessage)
+}
+
 type DestinationRouterT struct{
 	DBHandle				DBHandleI				`json:"DBHandle"`
+	RestHandle				RestHandleI				`json:"RestHandle"`
 	Enabled					bool					`json:"Enabled"`
 }
 
@@ -99,6 +107,21 @@ func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
 			}
 			destinationMutexMap[destinationID].Unlock()
 		}
+	} else if destCatalogue.Access == backendconfig.DestAccessType["REST"] {
+		if !exist || newDetail.Destination.Config != oldDetail.Destination.Config {
+			_, exist := destinationMutexMap[destinationID]
+			if !exist {
+				destinationMutexMap[destinationID] = &sync.RWMutex{}
+			}
+			destinationMutexMap[destinationID].Lock()
+			restHandle := &rest.HandleT{}
+			status := restHandle.Init(newDetail.Destination.Config)
+			destinationRouterMap[destinationID] = DestinationRouterT{
+				RestHandle: restHandle,
+				Enabled: status,
+			}
+			destinationMutexMap[destinationID].Unlock()
+		}
 	}
 	destinationMutexMap[destinationID].Lock()
 	destinationDetailMap[destinationID] = newDetail
@@ -123,7 +146,8 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 		jobRequest := <-router.JobProcessRequestQ
 		destID := jobRequest.DestinationID
 		logger.Info(fmt.Sprintf("Job request process for destination ID: %v", destID))
-		if destinationDetailMap[destID].Catalogue.Access == backendconfig.DestAccessType["DBPOLLING"] {
+		access := destinationDetailMap[destID].Catalogue.Access
+		if access == backendconfig.DestAccessType["DBPOLLING"] {
 			_, ok := destinationBatchMutexMap[destID]
 			if !ok {
 				destinationBatchMutexMap[destID] = &sync.RWMutex{}
@@ -131,7 +155,37 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 			destinationBatchMutexMap[destID].Lock()
 			batchJobProcessMap[destID] = append(batchJobProcessMap[destID], *jobRequest)
 			destinationBatchMutexMap[destID].Unlock()
-		} else {
+		} else if access == backendconfig.DestAccessType["REST"] {
+			_, ok := destinationBatchMutexMap[destID]
+			if !ok {
+				destinationBatchMutexMap[destID] = &sync.RWMutex{}
+			}
+			destinationBatchMutexMap[destID].Lock()
+			destRouter := destinationRouterMap[destID]
+			var errorCode string
+			var state string
+			var errorResponse []byte
+			if !destRouter.Enabled {
+				errorCode = ""
+				errorResponse = []byte(`{"error": "Destination Config Disabled"}`)
+				state = jobsdb.FailedState
+			} else {
+				statusCodeInt, err := destRouter.RestHandle.Send(jobRequest.EventPayload)
+				errorResponse = err
+				errorCode = strconv.Itoa(statusCodeInt)
+				if statusCodeInt != 200 && statusCodeInt != 202 {
+					state = jobsdb.FailedState
+				} else {
+					state = jobsdb.SucceededState
+				}
+			}
+			router.JobProcessResponseQ <- &JobProcessResponseT{
+				JobID: jobRequest.JobID,
+				State: state,
+				ErrorCode: errorCode,
+				ErrorResponse: errorResponse,
+			}
+			destinationBatchMutexMap[destID].Unlock()
 		}
 	}
 }
@@ -146,7 +200,6 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 				if firstDestID == 0 || lastProcessTimeMap[destID].Before(lastProcessTimeMap[firstDestID]) {
 					firstDestID = destID
 				}
-				logger.Info(fmt.Sprintf("%v %v", destID, len(batchJobProcessMap[destID])))
 			}
 			if firstDestID != 0 {
 				_, ok := destinationMutexMap[firstDestID]
