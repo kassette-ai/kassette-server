@@ -1,8 +1,9 @@
-package rest
+package anaplan
 
 import (
 	"io"
 	"fmt"
+	"time"
 	"bytes"
 	"encoding/json"
 	"net/url"
@@ -10,11 +11,33 @@ import (
 	"kassette.ai/kassette-server/utils/logger"
 )
 
+type MetaT struct {
+	ValidationUrl			string			`json:"validationUrl"`
+}
+
+type TokenInfoT struct {
+	ExpiresAt				int64			`json:"expiresAt"`
+	TokenID					string			`json:"tokenId"`
+	TokenValue				string			`json:"tokenValue"`
+	RefreshTokenId			string			`json:"refreshTokenId"`
+}
+
+type AuthInfoT struct {
+	Meta				MetaT				`json:"meta"`
+	Status				string				`json:"status"`
+	StatusMessage		string				`json:"statusMessage"`
+	TokenInfo			TokenInfoT			`json:"tokenInfo"`
+}
+
 type HandleT struct {
+	AuthUrl			string				`json:"AuthUrl"`
+	UserName		string				`json:"UserName"`
+	Password		string				`json:"Password"`
 	Url				string				`json:"Url"`
 	Method			string				`json:"Method"`
 	Query			string				`json:"Query"`
 	Header			map[string]string	`json:"Header"`
+	AuthInfo		AuthInfoT
 	Client			*http.Client
 }
 
@@ -29,6 +52,34 @@ func (handle *HandleT) getFullUrl() string {
 	return handle.Url + "?" + handle.Query
 }
 
+func (handle *HandleT) authenticate() (bool, string) {
+	req, err := http.NewRequest("POST", handle.AuthUrl, nil)
+	if err != nil {
+		return false, err.Error()
+	}
+	req.SetBasicAuth(handle.UserName, handle.Password)
+
+	resp, err := handle.Client.Do(req)
+	if err != nil {
+		return false, err.Error()
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err.Error()
+	}
+	err = json.Unmarshal(body, &handle.AuthInfo)
+	if err != nil {
+		return false, err.Error()
+	}
+	if handle.AuthInfo.Status == "SUCCESS" {
+		return true, ""
+	} else {
+		return false, handle.AuthInfo.StatusMessage
+	}
+}
+
 func (handle *HandleT) Init(config string) bool {
 	var configMap map[string]interface{}
 	err := json.Unmarshal([]byte(config), &configMap)
@@ -36,6 +87,27 @@ func (handle *HandleT) Init(config string) bool {
 		logger.Error(fmt.Sprintf("Error occurred while Unmarshaling Rest Config Data. Error: %s", err.Error()))
 		return false
 	}
+
+	authUrl, exist := configMap["authurl"]
+	if !exist {
+		logger.Error("AuthUrl field does not exist in the config data.")
+		return false
+	}
+	handle.AuthUrl = authUrl.(string)
+
+	userName, exist := configMap["username"]
+	if !exist {
+		logger.Error("UserName field does not exist in the config data.")
+		return false
+	}
+	handle.UserName = userName.(string)
+
+	password, exist := configMap["password"]
+	if !exist {
+		logger.Error("Password field does not exist in the config data.")
+		return false
+	}
+	handle.Password = password.(string)
 
 	destUrl, exist := configMap["url"]
 	if !exist {
@@ -84,19 +156,33 @@ func (handle *HandleT) Init(config string) bool {
 
 	handle.Client = &http.Client{}
 
-	logger.Info(fmt.Sprintf("Rest Destination Connected! %v", *handle))
-	
-	return true
+	authenticated, errMsg := handle.authenticate()
+
+	if authenticated {
+		logger.Info(fmt.Sprintf("Rest Destination Connected! %v", *handle))
+		return true
+	} else {
+		logger.Info(fmt.Sprintf("Authentication Failed! %s", errMsg))
+		return false
+	}
 }
 
 func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
+	currentTime := time.Now()
+	currentTimeStr := currentTime.Format("1970-01-01 00:00:00")
 	var BatchPayloadMapList []BatchPayloadT
-	payloads := []interface{}{}
+	payloads := []map[string]interface{}{}
 	json.Unmarshal(payload, &BatchPayloadMapList)
 	for _, batchPayload := range BatchPayloadMapList {
-		payloads = append(payloads, batchPayload.Payload...)
+		for idx, singleEvent := range batchPayload.Payload {
+			anaPlanPayload := map[string]interface{}{}
+			anaPlanPayload["code"] = fmt.Sprintf("%s-%d", currentTimeStr, idx)
+			anaPlanPayload["properties"] = singleEvent
+			payloads = append(payloads, anaPlanPayload)
+		}
 	}
-	payloadData, _ := json.Marshal(&payloads)
+	itemsPayload := map[string]interface{}{"items": payloads}
+	payloadData, _ := json.Marshal(&itemsPayload)
 	logger.Info(fmt.Sprintf("Payload data: %s", payloadData))
 	req, err := http.NewRequest(handle.Method, handle.getFullUrl(), bytes.NewBuffer(payloadData))
 	logger.Info(fmt.Sprintf("Full Url: %s", handle.getFullUrl()))
@@ -107,6 +193,8 @@ func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
 	for k, v := range handle.Header {
 		req.Header.Add(k, v)
 	}
+
+	req.Header.Add("Authorization", "Bearer " + handle.AuthInfo.TokenInfo.TokenValue)
 
 	resp, err := handle.Client.Do(req)
 	if err != nil {

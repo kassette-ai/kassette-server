@@ -10,7 +10,8 @@ import (
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/integrations/postgres"
-	"kassette.ai/kassette-server/integrations/rest"
+	"kassette.ai/kassette-server/integrations/powerbi"
+	"kassette.ai/kassette-server/integrations/anaplan"
 	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/utils"
 	"github.com/tidwall/gjson"
@@ -114,7 +115,12 @@ func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
 				destinationMutexMap[destinationID] = &sync.RWMutex{}
 			}
 			destinationMutexMap[destinationID].Lock()
-			restHandle := &rest.HandleT{}
+			var restHandle RestHandleI
+			if destCatalogue.Name == "PowerBI" {
+				restHandle = &powerbi.HandleT{}
+			} else if destCatalogue.Name == "AnaPlan" {
+				restHandle = &anaplan.HandleT{}
+			}
 			status := restHandle.Init(newDetail.Destination.Config)
 			destinationRouterMap[destinationID] = DestinationRouterT{
 				RestHandle: restHandle,
