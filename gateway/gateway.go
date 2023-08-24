@@ -503,7 +503,7 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
 	var err error
 	var writeKeyPayload misc.WriteKeyPayloadT
-	kassetteHeader := r.Header.Get("Kassette-Header")
+	kassetteHeader := r.Header.Get("Authorization")
 	decodedKassetteHeader, err := base64.StdEncoding.DecodeString(kassetteHeader)
 	if err != nil {
 		return []byte{}, "", errors.New("Not valid base64 encoded string")
