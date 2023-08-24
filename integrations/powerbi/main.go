@@ -1,4 +1,4 @@
-package rest
+package powerbi
 
 import (
 	"io"
@@ -111,7 +111,7 @@ func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
 	resp, err := handle.Client.Do(req)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Rest API job has been failed. Error: %s", err.Error()))
-		return resp.StatusCode, []byte(fmt.Sprintf(`{"error: "%s"}`, err.Error()))
+		return 500, []byte(fmt.Sprintf(`{"error: "%s"}`, err.Error()))
 	}
 	if resp.StatusCode != 200 && resp.StatusCode != 202 {
 		body, _ := io.ReadAll(resp.Body)

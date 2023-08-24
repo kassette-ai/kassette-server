@@ -2,21 +2,21 @@ package gateway
 
 import (
 	"context"
-	"encoding/json"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/tidwall/gjson"
@@ -37,7 +37,7 @@ var (
 	batchTimeout                              time.Duration
 	respMessage                               string
 	enabledWriteKeysSourceMap                 map[string]int
-	connectionsMap				  			  map[string][]int
+	connectionsMap                            map[string][]int
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
 
@@ -217,8 +217,8 @@ func (gateway *HandleT) startWebHandler() {
 
 	r.GET("/service-catalogue/:id", func(c *gin.Context) {
 		service_id_str := c.Param("id")
-		service_id, err := strconv.Atoi(service_id_str);
-		catalogue, err := gateway.configDB.GetServiceCatalogueByID(service_id);
+		service_id, err := strconv.Atoi(service_id_str)
+		catalogue, err := gateway.configDB.GetServiceCatalogueByID(service_id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
 		} else {
@@ -226,8 +226,8 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.POST("/service-catalogue", func(c* gin.Context) {
-		
+	r.POST("/service-catalogue", func(c *gin.Context) {
+
 		var catalogue backendconfig.ServiceCatalogueT
 		catalogue.Name = c.PostForm("name")
 		catalogue.Type = c.PostForm("type")
@@ -262,13 +262,13 @@ func (gateway *HandleT) startWebHandler() {
 		})
 	})
 
-	r.GET("/source", func(c* gin.Context) {
-		c.JSON(http.StatusOK, gateway.configDB.GetAllSources()) 
+	r.GET("/source", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllSources())
 	})
 
-	r.GET("/source/:id", func(c* gin.Context) {
+	r.GET("/source/:id", func(c *gin.Context) {
 		source_id_str := c.Param("id")
-		source_id, err := strconv.Atoi(source_id_str);
+		source_id, err := strconv.Atoi(source_id_str)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
@@ -280,7 +280,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.POST("/source", func(c* gin.Context) {
+	r.POST("/source", func(c *gin.Context) {
 		var source backendconfig.SourceInstanceT
 		var writeKeyPayload misc.WriteKeyPayloadT
 
@@ -299,7 +299,7 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
-	r.PATCH("/source", func(c* gin.Context) {
+	r.PATCH("/source", func(c *gin.Context) {
 		var source backendconfig.SourceInstanceT
 		var writeKeyPayload misc.WriteKeyPayloadT
 		err := c.BindJSON(&source)
@@ -315,7 +315,7 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
-	r.DELETE("/source/:id", func(c* gin.Context) {
+	r.DELETE("/source/:id", func(c *gin.Context) {
 		source_id_str := c.Param("id")
 		source_id, err := strconv.Atoi(source_id_str)
 		if err != nil {
@@ -326,13 +326,13 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.GET("/destination", func(c* gin.Context) {
-		c.JSON(http.StatusOK, gateway.configDB.GetAllDestinations()) 
+	r.GET("/destination", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllDestinations())
 	})
 
-	r.GET("/destination/:id", func(c* gin.Context) {
+	r.GET("/destination/:id", func(c *gin.Context) {
 		destination_id_str := c.Param("id")
-		destination_id, err := strconv.Atoi(destination_id_str);
+		destination_id, err := strconv.Atoi(destination_id_str)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
@@ -344,7 +344,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.POST("/destination", func(c* gin.Context) {
+	r.POST("/destination", func(c *gin.Context) {
 		var destination backendconfig.DestinationInstanceT
 		err := c.BindJSON(&destination)
 		if err != nil {
@@ -355,7 +355,7 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
-	r.PATCH("/destination", func(c* gin.Context) {
+	r.PATCH("/destination", func(c *gin.Context) {
 		var destination backendconfig.DestinationInstanceT
 		err := c.BindJSON(&destination)
 		if err != nil {
@@ -365,7 +365,7 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
-	r.DELETE("/destination/:id", func(c* gin.Context) {
+	r.DELETE("/destination/:id", func(c *gin.Context) {
 		destination_id_str := c.Param("id")
 		destination_id, err := strconv.Atoi(destination_id_str)
 		if err != nil {
@@ -376,11 +376,11 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.GET("/connection", func(c* gin.Context) {
-		c.JSON(http.StatusOK, gateway.configDB.GetAllConnections()) 
+	r.GET("/connection", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gateway.configDB.GetAllConnections())
 	})
 
-	r.GET("/connection/:id", func(c* gin.Context) {
+	r.GET("/connection/:id", func(c *gin.Context) {
 		connection_id_str := c.Param("id")
 		connection_id, err := strconv.Atoi(connection_id_str)
 		if err != nil {
@@ -394,7 +394,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.POST("/connection", func(c* gin.Context) {
+	r.POST("/connection", func(c *gin.Context) {
 		var connection backendconfig.ConnectionInstanceT
 		err := c.BindJSON(&connection)
 		if err != nil {
@@ -405,7 +405,7 @@ func (gateway *HandleT) startWebHandler() {
 		c.JSON(http.StatusOK, gin.H{"success": success})
 	})
 
-	r.PATCH("/connection", func(c* gin.Context) {
+	r.PATCH("/connection", func(c *gin.Context) {
 		var connection backendconfig.ConnectionInstanceT
 		err := c.BindJSON(&connection)
 		if err != nil {
@@ -426,7 +426,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.POST("/authenticate", func(c* gin.Context) {
+	r.POST("/authenticate", func(c *gin.Context) {
 		var payload misc.WriteKeyPayloadT
 		c.BindJSON(&payload)
 		hashValue := misc.GenerateWriteKey(payload)
@@ -479,12 +479,12 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 
 	done := make(chan string, 1)
 	req := webRequestT{
-		done: done,
-		reqType: reqType,
+		done:           done,
+		reqType:        reqType,
 		requestPayload: payload,
-		writeKey: writeKey,
-		ipAddr: c.Request.RemoteAddr,
-		userIDHeader: c.Request.Header.Get("X-User-ID"),
+		writeKey:       writeKey,
+		ipAddr:         c.Request.RemoteAddr,
+		userIDHeader:   c.Request.Header.Get("X-User-ID"),
 	}
 	gateway.webRequestQ <- &req
 
@@ -503,8 +503,12 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, error) {
 	var err error
 	var writeKeyPayload misc.WriteKeyPayloadT
-	kassetteHeader := r.Header.Get("Kassette-Header")
-	decodedKassetteHeader, err := base64.StdEncoding.DecodeString(kassetteHeader)
+	kassetteHeader := r.Header.Get("Authorization")
+	authParts := strings.SplitN(kassetteHeader, " ", 2)
+	if len(authParts) != 2 || authParts[0] != "Basic" {
+		return []byte{}, "", errors.New("Invalid authorization header format")
+	}
+	decodedKassetteHeader, err := base64.StdEncoding.DecodeString(authParts[1])
 	if err != nil {
 		return []byte{}, "", errors.New("Not valid base64 encoded string")
 	}
@@ -976,7 +980,7 @@ func (gateway *HandleT) webRequestBatchDBWriter(process int) {
 				EventPayload: body,
 			}
 
-			jobList = append(jobList, &newJob)	
+			jobList = append(jobList, &newJob)
 			jobIDReqMap[newJob.UUID] = req
 			jobWriteKeyMap[newJob.UUID] = writeKey
 		}
