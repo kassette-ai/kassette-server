@@ -118,7 +118,7 @@ func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
 			var restHandle RestHandleI
 			if destCatalogue.Name == "PowerBI" {
 				restHandle = &powerbi.HandleT{}
-			} else if destCatalogue.Name == "AnaPlan" {
+			} else if destCatalogue.Name == "Anaplan" {
 				restHandle = &anaplan.HandleT{}
 			}
 			status := restHandle.Init(newDetail.Destination.Config)
