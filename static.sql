@@ -86,3 +86,22 @@ COPY public.service_catalogue (id, name, type, access, category, url, notes, met
 6	Javascript	Source	Rest	Web Analytics	https://kassette.ai/sdk/javascript	Send data from internal WEB Applications	[{"name": "Client ID", "type": "text", "keyID": "client_id"}, {"name": "Client Secret", "type": "text", "keyID": "client_secret"}]	static/icons/javascript.png
 \.
 
+--
+-- Name: service_catalogue_id_seq; Type: SEQUENCE SET; Schema: public; Owner: kassette_user
+--
+
+SELECT pg_catalog.setval('public.service_catalogue_id_seq', 12, true);
+
+
+--
+-- Name: service_catalogue service_catalogue_pkey; Type: CONSTRAINT; Schema: public; Owner: kassette_user
+--
+
+ALTER TABLE ONLY public.service_catalogue
+    ADD CONSTRAINT service_catalogue_pkey PRIMARY KEY (id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+
