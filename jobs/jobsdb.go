@@ -189,7 +189,7 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	// If softDeletion flag is set to true,
 	// this jobsDB is determined to be cleaned up regularly.
 	if jd.softDeletion {
-		jd.maxDSJobs = 10
+		jd.maxDSJobs = viper.GetInt("jobdb.maxDSJobs")
 		go jd.clearProcessedJobs()
 	}
 }
