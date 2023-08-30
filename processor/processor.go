@@ -8,7 +8,6 @@ import (
 	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/gateway"
-	//"kassette.ai/kassette-server/integrations"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/utils"
@@ -231,8 +230,10 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
 		configSubscriberLock.RLock()
 		transformRule := connectionMap[connectionID].Connection.Transforms
+		configData := connectionMap[connectionID].DestinationDetail.Destination.Config
+		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
 		configSubscriberLock.RUnlock()
-		response := proc.transformer.Transform(destEventList, transformRule, transformBatchSize)
+		response := proc.transformer.Transform(destEventList, transformRule, configData, destCatalogueName, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		

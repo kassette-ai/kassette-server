@@ -1,21 +1,16 @@
 package processor
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 	"strconv"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
 )
 
 var (
-	TransType map[string]string
-	SystemTransformationRules []TransformationRuleT
-)
-
-func init() {
 	TransType = map[string]string{
 		"FIELDMAP": "field_map",
 		"FIELDHIDING": "field_hide",
@@ -27,16 +22,35 @@ func init() {
 			Type: TransType["FIELDHIDING"],
 		},
 	}
+	dataTypeMapToKassette = map[string]map[string]string{
+		"Postgres" : {
+			"INT":   	 	"int",
+			"FLOAT":   	 	"float64",
+			"BOOLEAN":   	"bool",
+			"SERIAL":	 	"int",
+			"BIGSERIAL": 	"int",
+			"VARCHAR":	 	"string",
+			"TEXT": 	 	"string",
+			"JSONB":		"string",
+			"TIMESTAMP":	"datetime",
+		},
+		"PowerBI": {
+		},
+		"Anaplan": {
+
+		},
+	}
+)
+
+type SchemaFieldT struct {
+	Name			string				`json:"name"`
+	Type			string				`json:"type"`
+	PrimaryKey		bool				`json:"primary_key"`
 }
 
-type Transformer interface {
-	Setup()
-	Transform(ctx context.Context, clientEvents []interface{}, ruleStr string, batchSize int) ResponseT
-}
-
-type ResponseT struct {
-	Events       []interface{}
-	Success      bool
+type SchemaT struct {
+	TableName		string				`json:"table_name"`
+	SchemaFields	[]SchemaFieldT		`json:"schema_fields"`
 }
 
 type TransformationRuleT struct {
@@ -47,6 +61,11 @@ type TransformationRuleT struct {
 	Value		string		`json:"value"`
 }
 
+type ResponseT struct {
+	Events       []interface{}
+	Success      bool
+}
+
 type transformerHandleT struct {
 	requestQ   chan *transformMessageT
 	responseQ  chan *transformMessageT
@@ -54,25 +73,95 @@ type transformerHandleT struct {
 }
 
 type transformMessageT struct {
-	index int
-	data  interface{}
-	rules  []TransformationRuleT
+	index 				int
+	data  				interface{}
+	rules  				[]TransformationRuleT
+	schema				SchemaT
+	destCataName		string
+}
+
+func convertToString(val interface{}) (string, bool) {
+	return fmt.Sprintf("%v", val), true
+}
+
+func convertToInt(val interface{}) (int, bool) {
+	switch val.(type) {
+	case int, int64:
+		return val.(int), true
+	case bool:
+		if val.(bool) {
+			return 1, true
+		} else {
+			return 0, true
+		}
+	case string:
+		vnum, err := strconv.Atoi(val.(string))
+		if err != nil {
+			return 0, false
+		} else {
+			return vnum, true
+		}
+	case float32:
+		return int(val.(float32)), true
+	case float64:
+		return int(val.(float64)), true
+	default:
+		return 0, false
+	}
+}
+
+func convertToFloat(val interface{}) (float64, bool) {
+	switch val.(type) {
+	case int:
+		return float64(val.(int)), true
+	case int64:
+		return float64(val.(int64)), true
+	case bool:
+		if val.(bool) {
+			return 1, true
+		} else {
+			return 0, true
+		}
+	case string:
+		vnum, err := strconv.ParseFloat(val.(string), 64)
+		if err != nil{
+			return 0, false
+		} else {
+			return vnum, true
+		}
+	case float32, float64:
+		return val.(float64), true
+	default:
+		return 0, false
+	}
+}
+
+func convertToBool(val interface{}) (bool, bool) {
+	if val.(bool) {
+		return true, true
+	} else {
+		return false, true
+	}
+}
+
+func convertToDateTime(val interface{}) (time.Time, bool) {
+	return time.Now(), true
 }
 
 func (trans *transformerHandleT) transformWorker() {
 
-	//batching payload
 	for job := range trans.requestQ {
 		reqArray := job.data.([]interface{})
-		respArray := transformBatchPayload(reqArray, job.rules)
+		respArray := transformBatchPayload(reqArray, job.rules, job.schema, job.destCataName)
 		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
 	}
 }
 
-func transformBatchPayload(m []interface{}, rules []TransformationRuleT) map[string]interface{} {
+func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema SchemaT, destCataName string) map[string]interface{} {
 
 	rawTransform := make(map[string]interface{})
 	batchPayload := make([]interface{}, 0)
+	typeMapRule, typeMapExist := dataTypeMapToKassette[destCataName]
 
 	for _, rawMap := range m {
 
@@ -112,8 +201,39 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT) map[str
 
 				}
 			}
-			if !hide {
-				transformedPayload[fieldName] = rawPayload[k]
+			if !hide && typeMapExist{
+				fields := schema.SchemaFields
+				var destDataType string
+				for _, field := range fields {
+					if field.Name == fieldName {
+						destDataType = field.Type
+						break
+					}
+				}
+				if destDataType != "" {
+					destTypeStr, ok := typeMapRule[destDataType]
+					if ok {
+						var convertV interface{}
+						var success bool
+						switch destTypeStr {
+						case "string":
+							convertV, success = convertToString(v)
+						case "int":
+							convertV, success = convertToInt(v)
+						case "float":
+							convertV, success = convertToFloat(v)
+						case "bool":
+							convertV, success = convertToBool(v)
+						case "datetime":
+							convertV, success = convertToDateTime(v)
+						}
+						if success {
+							transformedPayload[fieldName] = convertV
+						} else {
+							transformedPayload[fieldName] = nil
+						}
+					}
+				}
 			}
 		}
 		if !delete {
@@ -131,7 +251,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT) map[str
 
 // Transform function is used to invoke transformer API
 // Transformer is not thread safe. So we need to create a new instance for each request
-func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, batchSize int) ResponseT {
+func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, config string, destCataName string, batchSize int) ResponseT {
 
 	logger.Info("Transform!!!!")
 
@@ -149,6 +269,30 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	}
 
 	rules = append(rules, SystemTransformationRules...)
+
+	var configMap map[string]interface{}
+	err = json.Unmarshal([]byte(config), &configMap)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", config, err.Error()))
+		return ResponseT{
+			Events: 		[]interface{}{},
+			Success: 		false,
+		}
+	}
+
+	schema := SchemaT{}
+
+	schemaStr, ok := configMap["schema"].(string)
+	if ok {
+		err = json.Unmarshal([]byte(schemaStr), &schema)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", schemaStr, err.Error()))
+			return ResponseT {
+				Events:			[]interface{}{},
+				Success:		false,
+			}
+		}
+	}
 
 	var transformResponse = make([]*transformMessageT, 0)
 	inputIdx := 0
@@ -182,7 +326,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		}
 		select {
 		//In case of batch event, index is the next Index
-		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules}:
+		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, schema: schema, destCataName: destCataName}:
 			totalSent++
 			toSendData = nil
 			if inputIdx == len(clientEvents) {
