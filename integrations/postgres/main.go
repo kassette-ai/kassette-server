@@ -2,27 +2,20 @@ package postgres
 
 import (
 	"fmt"
-	"time"
 	"strings"
 	"database/sql"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/processor"
 )
 
-type SchemaFieldT struct {
-	Name			string				`json:"name"`
-	Type			string				`json:"type"`
-	PrimaryKey		bool				`json:"primary_key"`
-}
-
-type SchemaT struct {
-	TableName		string				`json:"table_name"`
-	SchemaFields	[]SchemaFieldT		`json:"schema_fields"`
-}
-
 type HandleT struct {
-	DBHandle		*sql.DB			`json:"DBHandle"`
-	Schema			SchemaT			`json:"Schema"`
+	DBHandle		*sql.DB						`json:"DBHandle"`
+	Schema			processor.SchemaT			`json:"Schema"`
+}
+
+type BatchPayloadT struct {
+	Payload			[]interface{}		`json:"payload"`
 }
 
 func (handle *HandleT) createDestinationTable(schema string) bool {
@@ -91,16 +84,42 @@ func (handle *HandleT) Connect(config string) bool {
 	return true
 }
 
-func (handle *HandleT) InsertPayloadInTransaction(payloads []json.RawMessage) error {
+func (handle *HandleT) InsertPayloadInTransaction(rawPayloads []json.RawMessage) error {
 	tx, err := handle.DBHandle.Begin()
 	if err != nil {
 		return err
 	}
+	var BatchPayloadMapList []BatchPayloadT
+	payloads := []map[string]interface{}{}
+	for _, rawPayload := range rawPayloads {
+		json.Unmarshal(rawPayload, &BatchPayloadMapList)
+		for _, batchPayload := range BatchPayloadMapList {
+			for _, singleEvent := range batchPayload.Payload {
+				payloads = append(payloads, singleEvent.(map[string]interface{}))
+			}
+		}
+	}
 	for _, payload := range payloads {
-		insertStmt := fmt.Sprintf(`INSERT INTO %s (payload, received_at) VALUES ($1, $2)`, handle.Schema.TableName)
-		_, err = tx.Exec(insertStmt, payload, time.Now())
-		if err != nil {
-			return err
+
+		valArr := []interface{}{}
+		fieldNameArr := []string{}
+		indexArr := []string{}
+		index := 0
+		for fieldName, val := range payload {
+			if val != nil {
+				fieldNameArr = append(fieldNameArr, fieldName)
+				valArr = append(valArr, val)
+				indexArr = append(indexArr, fmt.Sprintf("$%v", index + 1))
+				index ++
+			}
+		}
+		if index > 0 {
+			insertStmt := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, handle.Schema.TableName, strings.Join(fieldNameArr, ","), strings.Join(indexArr, ","))
+			logger.Info(fmt.Sprintf("heyheyhey: %s", insertStmt))
+			_, err = tx.Exec(insertStmt, valArr...)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	if err := tx.Commit(); err != nil {

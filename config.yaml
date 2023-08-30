@@ -5,6 +5,9 @@ database:
   port: 5432
   ssl_mode: disable
   user: kassette_user
+logLevel: INFO
+jobdb:
+  maxDSJobs: 10
 gateway:
   allowReqsWithoutUserIDAndAnonymousID: true
   batchTimeoutInMS: 2000
@@ -13,7 +16,6 @@ gateway:
   maxReqSizeInKB: 1000000
   maxWebReqQSize: 1
   webPort: 8080
-logLevel: INFO
 router:
   jobQueryBatchSize: 10
   keepOrderOnFailure: false
@@ -30,11 +32,3 @@ router:
   updateStatusBatchSize: 10
   useTestSink: false
 serverPort: 8088
-warehouse:
-  host: kassette-server-postgresql-hl
-  name: warehouse
-  password: password
-  port: 5432
-  ssl_mode: disable
-  user: kassette_user
-  
