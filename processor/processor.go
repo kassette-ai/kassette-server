@@ -232,8 +232,9 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		transformRule := connectionMap[connectionID].Connection.Transforms
 		configData := connectionMap[connectionID].DestinationDetail.Destination.Config
 		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
+		srcCatalogueName := connectionMap[connectionID].SourceDetail.Catalogue.Name
 		configSubscriberLock.RUnlock()
-		response := proc.transformer.Transform(destEventList, transformRule, configData, destCatalogueName, transformBatchSize)
+		response := proc.transformer.Transform(destEventList, transformRule, configData, srcCatalogueName, destCatalogueName, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		
