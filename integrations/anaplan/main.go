@@ -3,12 +3,21 @@ package anaplan
 import (
 	"io"
 	"fmt"
-	"time"
 	"bytes"
 	"encoding/json"
 	"net/url"
 	"net/http"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations"
+)
+
+var (
+	TypeMapKassetteToDest = map[string]string{
+		"NUMBER":   	 	"number",
+		"BOOLEAN":   		"bool",
+		"TEXT": 	 		"string",
+		"DATE":				"date",
+	}
 )
 
 type MetaT struct {
@@ -39,10 +48,6 @@ type HandleT struct {
 	Header			map[string]string	`json:"Header"`
 	AuthInfo		AuthInfoT
 	Client			*http.Client
-}
-
-type BatchPayloadT struct {
-	Payload			[]interface{}		`json:"payload"`
 }
 
 func (handle *HandleT) getFullUrl() string {
@@ -167,16 +172,14 @@ func (handle *HandleT) Init(config string) bool {
 	}
 }
 
-func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
-	currentTime := time.Now()
-	currentTimeStr := currentTime.Format("1970-01-01 00:00:00")
-	var BatchPayloadMapList []BatchPayloadT
+func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface{}) (int, json.RawMessage) {
+	var BatchPayloadMapList []integrations.BatchPayloadT
 	payloads := []map[string]interface{}{}
 	json.Unmarshal(payload, &BatchPayloadMapList)
 	for _, batchPayload := range BatchPayloadMapList {
 		for idx, singleEvent := range batchPayload.Payload {
 			anaPlanPayload := map[string]interface{}{}
-			anaPlanPayload["code"] = fmt.Sprintf("%s-%d", currentTimeStr, idx)
+			anaPlanPayload["code"] = fmt.Sprintf("%v-%v", config["JobID"], idx)
 			anaPlanPayload["properties"] = singleEvent
 			payloads = append(payloads, anaPlanPayload)
 		}

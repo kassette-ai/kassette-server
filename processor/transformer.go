@@ -8,6 +8,10 @@ import (
 	"strconv"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/powerbi"
+	"kassette.ai/kassette-server/integrations/anaplan"
 )
 
 var (
@@ -22,42 +26,7 @@ var (
 			Type: TransType["FIELDHIDING"],
 		},
 	}
-	dataTypeMapToKassette = map[string]map[string]string{
-		"Postgres" : {
-			"INT":   	 	"int",
-			"FLOAT":   	 	"float64",
-			"BOOLEAN":   	"bool",
-			"SERIAL":	 	"int",
-			"BIGSERIAL": 	"int",
-			"VARCHAR":	 	"string",
-			"TEXT": 	 	"string",
-			"JSONB":		"string",
-			"TIMESTAMP":	"datetime",
-		},
-		"PowerBI": {
-			"INT":   	 	"int",
-			"TEXT": 	 	"string",
-			"TIMESTAMP":	"datetime",
-		},
-		"Anaplan": {
-			"INT":   	 	"int",
-			"BOOLEAN":   	"bool",
-			"TEXT": 	 	"string",
-			"TIMESTAMP":	"datetime",
-		},
-	}
-)
-
-type SchemaFieldT struct {
-	Name			string				`json:"name"`
-	Type			string				`json:"type"`
-	PrimaryKey		bool				`json:"primary_key"`
-}
-
-type SchemaT struct {
-	TableName		string				`json:"table_name"`
-	SchemaFields	[]SchemaFieldT		`json:"schema_fields"`
-}
+)	
 
 type TransformationRuleT struct {
 	From		string		`json:"from"`
@@ -82,7 +51,7 @@ type transformMessageT struct {
 	index 				int
 	data  				interface{}
 	rules  				[]TransformationRuleT
-	schema				SchemaT
+	schema				integrations.SchemaT
 	srcCataName			string
 	destCataName		string
 }
@@ -144,15 +113,106 @@ func convertToFloat(val interface{}) (float64, bool) {
 }
 
 func convertToBool(val interface{}) (bool, bool) {
-	if val.(bool) {
-		return true, true
-	} else {
-		return false, true
+	switch val.(type) {
+	case string:
+		return val.(string) == "true", true
+	case bool:
+		return val.(bool), true
+	default:
+		return false, false
 	}
 }
 
-func convertToDateTime(val interface{}, srcName string, destName string) (time.Time, bool) {
-	return time.Now(), true
+func convertToNumber(val interface{}) (interface{}, bool) {
+	switch val.(type) {
+	case int, int64:
+		return val.(int), true
+	case bool:
+		if val.(bool) {
+			return 1, true
+		} else {
+			return 0, true
+		}
+	case string:
+		vfloat, err := strconv.ParseFloat(val.(string), 64)
+		if err == nil {
+			return vfloat, true
+		} else {
+			vnum, err := strconv.Atoi(val.(string))
+			if err != nil {
+				return 0, false
+			} else {
+				return vnum, true
+			}
+		}
+	case float32:
+		return int(val.(float32)), true
+	case float64:
+		return int(val.(float64)), true
+	default:
+		return 0, false
+	}
+}
+
+func convertToDate(val interface{}, srcName string, destName string) (string, bool) {
+	switch val.(type) {
+	case string:
+	default:
+		return "", false
+	}
+	
+	var srcTime time.Time
+	switch srcName {
+	case "Camunda":
+		parsedTime, err := time.Parse("2006-01-02T15:04:05.000Z", val.(string))
+		if err != nil {
+			logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
+			return "", false
+		} else {
+			srcTime = parsedTime
+		}
+	}
+	if srcTime.IsZero() {
+		return "", false
+	}
+	
+	switch destName {
+	case "Anaplan", "Postgres":
+		return srcTime.Format("2006-01-02"), true
+	}
+	
+	return "", true
+}
+
+func convertToDateTime(val interface{}, srcName string, destName string) (string, bool) {
+	
+	switch val.(type) {
+	case string:
+	default:
+		return "", false
+	}
+	
+	var srcTime time.Time
+	switch srcName {
+	case "Camunda":
+		parsedTime, err := time.Parse("2006-01-02T15:04:05.000Z", val.(string))
+		if err != nil {
+			logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
+			return "", false
+		} else {
+			srcTime = parsedTime
+		}
+	}
+	if srcTime.IsZero() {
+		return "", false
+	}
+	
+	switch destName {
+	case "PowerBI", "Postgres":
+		return srcTime.Format("2006-01-02T15:04:05.000Z"), true
+	}
+	
+	return "", true
 }
 
 func (trans *transformerHandleT) transformWorker() {
@@ -164,11 +224,20 @@ func (trans *transformerHandleT) transformWorker() {
 	}
 }
 
-func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema SchemaT, srcCataName string, destCataName string) map[string]interface{} {
+func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSchema integrations.SchemaT, srcCataName string, destCataName string) map[string]interface{} {
 
+	var typeMapKassetteToDest map[string]string
 	rawTransform := make(map[string]interface{})
 	batchPayload := make([]interface{}, 0)
-	typeMapRule, typeMapExist := dataTypeMapToKassette[destCataName]
+
+	switch destCataName {
+	case "Postgres":
+		typeMapKassetteToDest = postgres.TypeMapKassetteToDest
+	case "PowerBI":
+		typeMapKassetteToDest = powerbi.TypeMapKassetteToDest
+	case "Anaplan":
+		typeMapKassetteToDest = anaplan.TypeMapKassetteToDest
+	}
 
 	for _, rawMap := range m {
 
@@ -205,43 +274,50 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema 
 							delete = true
 						}
 					}
-
 				}
 			}
-			if !hide && typeMapExist{
-				fields := schema.SchemaFields
+			if !hide && typeMapKassetteToDest != nil{
 				var destDataType string
-				for _, field := range fields {
-					if field.Name == fieldName {
-						destDataType = field.Type
-						break
+				destFields := destSchema.SchemaFields
+				if len(destFields) == 0 {
+					if destCataName != "Postgres" {
+						transformedPayload[fieldName] = v
 					}
-				}
-				if destDataType != "" {
-					destTypeStr, ok := typeMapRule[destDataType]
-					if ok {
-						var convertV interface{}
-						var success bool
-						switch destTypeStr {
-						case "string":
-							convertV, success = convertToString(v)
-						case "int":
-							convertV, success = convertToInt(v)
-						case "float":
-							convertV, success = convertToFloat(v)
-						case "bool":
-							convertV, success = convertToBool(v)
-						case "datetime":
-							convertV, success = convertToDateTime(v, srcCataName, destCataName)
-						}
-						if success {
-							transformedPayload[fieldName] = convertV
-						} else {
-							transformedPayload[fieldName] = nil
+				} else {
+					for _, destfield := range destFields {
+						if destfield.Name == fieldName {
+							destDataType = destfield.Type
+							break
 						}
 					}
-				} else if destCataName != "Postgres" {
-					transformedPayload[fieldName] = v
+					if destDataType != "" {
+						destType, ok := typeMapKassetteToDest[destDataType]
+						if ok {
+							var convertV interface{}
+							var success bool
+							switch destType {
+							case "string":
+								convertV, success = convertToString(v)
+							case "int":
+								convertV, success = convertToInt(v)
+							case "float":
+								convertV, success = convertToFloat(v)
+							case "bool":
+								convertV, success = convertToBool(v)
+							case "number":
+								convertV, success = convertToNumber(v)
+							case "date":
+								convertV, success = convertToDate(v, srcCataName, destCataName)
+							case "datetime":
+								convertV, success = convertToDateTime(v, srcCataName, destCataName)
+							}
+							if success {
+								transformedPayload[fieldName] = convertV
+							} else {
+								transformedPayload[fieldName] = nil
+							}
+						}
+					}
 				}
 			}
 		}
@@ -289,7 +365,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		}
 	}
 
-	schema := SchemaT{}
+	schema := integrations.SchemaT{}
 
 	schemaStr, ok := configMap["schema"].(string)
 	if ok {

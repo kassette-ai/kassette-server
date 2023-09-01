@@ -7,34 +7,44 @@ import (
 	"database/sql"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
-	"kassette.ai/kassette-server/processor"
+	"kassette.ai/kassette-server/integrations"
+)
+
+var (
+	TypeMapKassetteToDest = map[string]string{
+		"INT":   	 	"int",
+		"FLOAT":   	 	"float64",
+		"BOOLEAN":   	"bool",
+		"SERIAL":	 	"int",
+		"BIGSERIAL": 	"int64",
+		"VARCHAR":	 	"string",
+		"TEXT": 	 	"string",
+		"JSONB":		"string",
+		"TIMESTAMP":	"datetime",
+	}
 )
 
 type HandleT struct {
 	DBHandle		*sql.DB						`json:"DBHandle"`
-	Schema			processor.SchemaT			`json:"Schema"`
-}
-
-type BatchPayloadT struct {
-	Payload			[]interface{}		`json:"payload"`
+	Schema			integrations.SchemaT		`json:"Schema"`
 }
 
 func (handle *HandleT) createDestinationTable(schema string) bool {
-	var newSchema processor.SchemaT
+	var newSchema integrations.SchemaT
 	err := json.Unmarshal([]byte(schema), &newSchema)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error while creating destination table [%s]. Error: %s", schema, err.Error()))
 		return false
 	}
 	equal := reflect.DeepEqual(handle.Schema, newSchema)
-	handle.Schema = newSchema
-	if !equal {
+	if !equal && handle.Schema.TableName != "" {
 		_, err := handle.DBHandle.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", handle.Schema.TableName))
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error while dropping old destination table [%s]. Error: %s", schema, err.Error()))
 			return false
 		}
 	}
+	handle.Schema = newSchema
 	createTableSql := `CREATE TABLE IF NOT EXISTS %s (%s);`
 	fieldDefinitionList := []string{}
 	for _, field := range handle.Schema.SchemaFields {
@@ -100,7 +110,7 @@ func (handle *HandleT) InsertPayloadInTransaction(rawPayloads []json.RawMessage)
 	if err != nil {
 		return err
 	}
-	var BatchPayloadMapList []BatchPayloadT
+	var BatchPayloadMapList []integrations.BatchPayloadT
 	payloads := []map[string]interface{}{}
 	for _, rawPayload := range rawPayloads {
 		json.Unmarshal(rawPayload, &BatchPayloadMapList)
