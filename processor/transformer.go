@@ -35,9 +35,15 @@ var (
 			"TIMESTAMP":	"datetime",
 		},
 		"PowerBI": {
+			"INT":   	 	"int",
+			"TEXT": 	 	"string",
+			"TIMESTAMP":	"datetime",
 		},
 		"Anaplan": {
-
+			"INT":   	 	"int",
+			"BOOLEAN":   	"bool",
+			"TEXT": 	 	"string",
+			"TIMESTAMP":	"datetime",
 		},
 	}
 )
@@ -77,6 +83,7 @@ type transformMessageT struct {
 	data  				interface{}
 	rules  				[]TransformationRuleT
 	schema				SchemaT
+	srcCataName			string
 	destCataName		string
 }
 
@@ -144,7 +151,7 @@ func convertToBool(val interface{}) (bool, bool) {
 	}
 }
 
-func convertToDateTime(val interface{}) (time.Time, bool) {
+func convertToDateTime(val interface{}, srcName string, destName string) (time.Time, bool) {
 	return time.Now(), true
 }
 
@@ -152,12 +159,12 @@ func (trans *transformerHandleT) transformWorker() {
 
 	for job := range trans.requestQ {
 		reqArray := job.data.([]interface{})
-		respArray := transformBatchPayload(reqArray, job.rules, job.schema, job.destCataName)
+		respArray := transformBatchPayload(reqArray, job.rules, job.schema, job.srcCataName, job.destCataName)
 		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
 	}
 }
 
-func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema SchemaT, destCataName string) map[string]interface{} {
+func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema SchemaT, srcCataName string, destCataName string) map[string]interface{} {
 
 	rawTransform := make(map[string]interface{})
 	batchPayload := make([]interface{}, 0)
@@ -225,7 +232,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema 
 						case "bool":
 							convertV, success = convertToBool(v)
 						case "datetime":
-							convertV, success = convertToDateTime(v)
+							convertV, success = convertToDateTime(v, srcCataName, destCataName)
 						}
 						if success {
 							transformedPayload[fieldName] = convertV
@@ -233,6 +240,8 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema 
 							transformedPayload[fieldName] = nil
 						}
 					}
+				} else if destCataName != "Postgres" {
+					transformedPayload[fieldName] = v
 				}
 			}
 		}
@@ -251,7 +260,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, schema 
 
 // Transform function is used to invoke transformer API
 // Transformer is not thread safe. So we need to create a new instance for each request
-func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, config string, destCataName string, batchSize int) ResponseT {
+func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, config string, srcCataName string, destCataName string, batchSize int) ResponseT {
 
 	logger.Info("Transform!!!!")
 
@@ -326,7 +335,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		}
 		select {
 		//In case of batch event, index is the next Index
-		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, schema: schema, destCataName: destCataName}:
+		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, schema: schema, srcCataName: srcCataName, destCataName: destCataName}:
 			totalSent++
 			toSendData = nil
 			if inputIdx == len(clientEvents) {

@@ -3,6 +3,7 @@ package postgres
 import (
 	"fmt"
 	"strings"
+	"reflect"
 	"database/sql"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
@@ -19,10 +20,20 @@ type BatchPayloadT struct {
 }
 
 func (handle *HandleT) createDestinationTable(schema string) bool {
-	err := json.Unmarshal([]byte(schema), &handle.Schema)
+	var newSchema processor.SchemaT
+	err := json.Unmarshal([]byte(schema), &newSchema)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error while creating destination table [%s]. Error: %s", schema, err.Error()))
 		return false
+	}
+	equal := reflect.DeepEqual(handle.Schema, newSchema)
+	handle.Schema = newSchema
+	if !equal {
+		_, err := handle.DBHandle.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", handle.Schema.TableName))
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error while dropping old destination table [%s]. Error: %s", schema, err.Error()))
+			return false
+		}
 	}
 	createTableSql := `CREATE TABLE IF NOT EXISTS %s (%s);`
 	fieldDefinitionList := []string{}
@@ -115,7 +126,6 @@ func (handle *HandleT) InsertPayloadInTransaction(rawPayloads []json.RawMessage)
 		}
 		if index > 0 {
 			insertStmt := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, handle.Schema.TableName, strings.Join(fieldNameArr, ","), strings.Join(indexArr, ","))
-			logger.Info(fmt.Sprintf("heyheyhey: %s", insertStmt))
 			_, err = tx.Exec(insertStmt, valArr...)
 			if err != nil {
 				return err
