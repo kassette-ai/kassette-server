@@ -55,7 +55,7 @@ type DBHandleI interface{
 
 type RestHandleI interface{
 	Init(string) bool
-	Send(json.RawMessage) (int, json.RawMessage)
+	Send(json.RawMessage, map[string]interface{}) (int, json.RawMessage)
 }
 
 type DestinationRouterT struct{
@@ -176,7 +176,10 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				errorResponse = []byte(`{"error": "Destination Config Disabled"}`)
 				state = jobsdb.FailedState
 			} else {
-				statusCodeInt, err := destRouter.RestHandle.Send(jobRequest.EventPayload)
+				configMap := map[string]interface{}{
+					"JobID": jobRequest.JobID,
+				}
+				statusCodeInt, err := destRouter.RestHandle.Send(jobRequest.EventPayload, configMap)
 				errorResponse = err
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {

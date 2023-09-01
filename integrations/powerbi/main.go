@@ -8,6 +8,15 @@ import (
 	"net/url"
 	"net/http"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations"
+)
+
+var (
+	TypeMapKassetteToDest = map[string]string{
+		"NUMBER":   	 	"number",
+		"TEXT": 	 		"string",
+		"DATETIME":			"datetime",
+	}
 )
 
 type HandleT struct {
@@ -16,10 +25,6 @@ type HandleT struct {
 	Query			string				`json:"Query"`
 	Header			map[string]string	`json:"Header"`
 	Client			*http.Client
-}
-
-type BatchPayloadT struct {
-	Payload			[]interface{}		`json:"payload"`
 }
 
 func (handle *HandleT) getFullUrl() string {
@@ -89,8 +94,8 @@ func (handle *HandleT) Init(config string) bool {
 	return true
 }
 
-func (handle *HandleT) Send(payload json.RawMessage) (int, json.RawMessage) {
-	var BatchPayloadMapList []BatchPayloadT
+func (handle *HandleT) Send(payload json.RawMessage, _ map[string]interface{}) (int, json.RawMessage) {
+	var BatchPayloadMapList []integrations.BatchPayloadT
 	payloads := []interface{}{}
 	json.Unmarshal(payload, &BatchPayloadMapList)
 	for _, batchPayload := range BatchPayloadMapList {

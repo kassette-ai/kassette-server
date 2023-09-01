@@ -1,4 +1,4 @@
-package integrations
+package s3
 
 import (
 	"bytes"
