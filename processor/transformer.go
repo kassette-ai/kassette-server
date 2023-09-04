@@ -195,7 +195,7 @@ func convertToDateTime(val interface{}, srcName string, destName string) (string
 	var srcTime time.Time
 	switch srcName {
 	case "Camunda":
-		parsedTime, err := time.Parse("2006-01-02T15:04:05.000Z", val.(string))
+		parsedTime, err := time.Parse(time.RFC3339, val.(string))
 		if err != nil {
 			logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
 			return "", false
