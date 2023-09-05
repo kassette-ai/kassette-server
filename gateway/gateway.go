@@ -28,6 +28,10 @@ import (
 	"kassette.ai/kassette-server/response"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/powerbi"
+	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/sources"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -442,6 +446,23 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
+	r.GET("/field-options", func(c* gin.Context) {
+		cataType := c.Query("type")
+		name := c.Query("name")
+		if cataType == "destination" {
+			switch name {
+			case "Postgres":
+				c.JSON(http.StatusOK, postgres.TypeMapKassetteToDest)
+			case "PowerBI":
+				c.JSON(http.StatusOK, powerbi.TypeMapKassetteToDest)
+			case "Anaplan":
+				c.JSON(http.StatusOK, anaplan.TypeMapKassetteToDest)
+			}
+		} else if cataType == "source" {
+			c.JSON(http.StatusOK, sources.TypeMapKassetteToSrc)
+		}
+	})
+
 	serverPort := viper.GetString("serverPort")
 
 	err := r.Run(":" + serverPort)
@@ -474,6 +495,7 @@ func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error getting payload and write key. Error: %s", err.Error()))
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
