@@ -540,6 +540,7 @@ func (gateway *HandleT) getPayloadAndWriteKey(r *http.Request) ([]byte, string, 
 	}
 	writeKeyPayload.CustomerName = splittedDecode[0]
 	writeKeyPayload.SecretKey = splittedDecode[1]
+
 	writeKey := misc.GenerateWriteKey(writeKeyPayload)
 	passed, err := gateway.configDB.Authenticate(writeKey)
 

@@ -14,3 +14,7 @@ type SchemaT struct {
 type BatchPayloadT struct {
 	Payload			[]interface{}		`json:"payload"`
 }
+
+type TransformerHandleI interface {
+	Convert(interface{}, string) (interface{}, bool)
+}

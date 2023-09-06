@@ -12,6 +12,10 @@ import (
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/powerbi"
+	"kassette.ai/kassette-server/integrations/anaplan"
 	"log"
 	"sort"
 	"sync"
@@ -232,9 +236,25 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		transformRule := connectionMap[connectionID].Connection.Transforms
 		configData := connectionMap[connectionID].DestinationDetail.Destination.Config
 		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
-		srcCatalogueName := connectionMap[connectionID].SourceDetail.Catalogue.Name
+		var typeMapKassetteToDest map[string]string
+		var destConverter integrations.TransformerHandleI
+		var destSkipWithNoSchema bool
+		switch destCatalogueName {
+		case "Postgres":
+			typeMapKassetteToDest = postgres.TypeMapKassetteToDest
+			destConverter = &postgres.TransformerHandleT{}
+			destSkipWithNoSchema = true
+		case "PowerBI":
+			typeMapKassetteToDest = powerbi.TypeMapKassetteToDest
+			destConverter = &powerbi.TransformerHandleT{}
+			destSkipWithNoSchema = false
+		case "Anaplan":
+			typeMapKassetteToDest = anaplan.TypeMapKassetteToDest
+			destConverter = &anaplan.TransformerHandleT{}
+			destSkipWithNoSchema = false
+		}
 		configSubscriberLock.RUnlock()
-		response := proc.transformer.Transform(destEventList, transformRule, configData, srcCatalogueName, destCatalogueName, transformBatchSize)
+		response := proc.transformer.Transform(destEventList, transformRule, configData, destConverter, typeMapKassetteToDest, destSkipWithNoSchema, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		
