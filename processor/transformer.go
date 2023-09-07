@@ -4,14 +4,11 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"time"
 	"strconv"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/integrations"
-	"kassette.ai/kassette-server/integrations/postgres"
-	"kassette.ai/kassette-server/integrations/powerbi"
-	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/sources"
 )
 
 var (
@@ -48,196 +45,32 @@ type transformerHandleT struct {
 }
 
 type transformMessageT struct {
-	index 				int
-	data  				interface{}
-	rules  				[]TransformationRuleT
-	schema				integrations.SchemaT
-	srcCataName			string
-	destCataName		string
-}
-
-func convertToString(val interface{}) (string, bool) {
-	return fmt.Sprintf("%v", val), true
-}
-
-func convertToInt(val interface{}) (int, bool) {
-	switch val.(type) {
-	case int, int64:
-		return val.(int), true
-	case bool:
-		if val.(bool) {
-			return 1, true
-		} else {
-			return 0, true
-		}
-	case string:
-		vnum, err := strconv.Atoi(val.(string))
-		if err != nil {
-			return 0, false
-		} else {
-			return vnum, true
-		}
-	case float32:
-		return int(val.(float32)), true
-	case float64:
-		return int(val.(float64)), true
-	default:
-		return 0, false
-	}
-}
-
-func convertToFloat(val interface{}) (float64, bool) {
-	switch val.(type) {
-	case int:
-		return float64(val.(int)), true
-	case int64:
-		return float64(val.(int64)), true
-	case bool:
-		if val.(bool) {
-			return 1, true
-		} else {
-			return 0, true
-		}
-	case string:
-		vnum, err := strconv.ParseFloat(val.(string), 64)
-		if err != nil{
-			return 0, false
-		} else {
-			return vnum, true
-		}
-	case float32, float64:
-		return val.(float64), true
-	default:
-		return 0, false
-	}
-}
-
-func convertToBool(val interface{}) (bool, bool) {
-	switch val.(type) {
-	case string:
-		return val.(string) == "true", true
-	case bool:
-		return val.(bool), true
-	default:
-		return false, false
-	}
-}
-
-func convertToNumber(val interface{}) (interface{}, bool) {
-	switch val.(type) {
-	case int, int64:
-		return val.(int), true
-	case bool:
-		if val.(bool) {
-			return 1, true
-		} else {
-			return 0, true
-		}
-	case string:
-		vfloat, err := strconv.ParseFloat(val.(string), 64)
-		if err == nil {
-			return vfloat, true
-		} else {
-			vnum, err := strconv.Atoi(val.(string))
-			if err != nil {
-				return 0, false
-			} else {
-				return vnum, true
-			}
-		}
-	case float32:
-		return int(val.(float32)), true
-	case float64:
-		return int(val.(float64)), true
-	default:
-		return 0, false
-	}
-}
-
-func convertToDate(val interface{}, srcName string, destName string) (string, bool) {
-	switch val.(type) {
-	case string:
-	default:
-		return "", false
-	}
-	
-	var srcTime time.Time
-	switch srcName {
-	case "Camunda":
-		parsedTime, err := time.Parse("2006-01-02T15:04:05.000Z", val.(string))
-		if err != nil {
-			logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
-			return "", false
-		} else {
-			srcTime = parsedTime
-		}
-	}
-	if srcTime.IsZero() {
-		return "", false
-	}
-	
-	switch destName {
-	case "Anaplan", "Postgres":
-		return srcTime.Format("2006-01-02"), true
-	}
-	
-	return "", true
-}
-
-func convertToDateTime(val interface{}, srcName string, destName string) (string, bool) {
-	
-	switch val.(type) {
-	case string:
-	default:
-		return "", false
-	}
-	
-	var srcTime time.Time
-	switch srcName {
-	case "Camunda":
-		parsedTime, err := time.Parse(time.RFC3339, val.(string))
-		if err != nil {
-			logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
-			return "", false
-		} else {
-			srcTime = parsedTime
-		}
-	}
-	if srcTime.IsZero() {
-		return "", false
-	}
-	
-	switch destName {
-	case "PowerBI", "Postgres":
-		return srcTime.Format("2006-01-02T15:04:05.000Z"), true
-	}
-	
-	return "", true
+	index 					int
+	data  					interface{}
+	rules  					[]TransformationRuleT
+	destSchema				integrations.SchemaT
+	destConverter			integrations.TransformerHandleI
+	typeMapToDest			map[string]string
+	destSkipWithNoSchema	bool
+	srcSchema				integrations.SchemaT
+	srcConverter			sources.TransformerHandleI
+	typeMapToSrc			map[string]string
+	srcSkipWithNoSchema		bool
 }
 
 func (trans *transformerHandleT) transformWorker() {
 
 	for job := range trans.requestQ {
 		reqArray := job.data.([]interface{})
-		respArray := transformBatchPayload(reqArray, job.rules, job.schema, job.srcCataName, job.destCataName)
+		respArray := transformBatchPayload(reqArray, job.rules, job.destConverter, job.destSchema, job.typeMapToDest, job.destSkipWithNoSchema, job.srcConverter, job.srcSchema, job.typeMapToSrc, job.srcSkipWithNoSchema)
 		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
 	}
 }
 
-func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSchema integrations.SchemaT, srcCataName string, destCataName string) map[string]interface{} {
+func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destConverter integrations.TransformerHandleI, destSchema integrations.SchemaT, typeMapKassetteToDest map[string]string, destSkipWithNoSchema bool, srcConverter sources.TransformerHandleI, srcSchema integrations.SchemaT, typeMapKassetteToSrc map[string]string, srcSkipWithNoSchema bool) map[string]interface{} {
 
-	var typeMapKassetteToDest map[string]string
 	rawTransform := make(map[string]interface{})
 	batchPayload := make([]interface{}, 0)
-
-	switch destCataName {
-	case "Postgres":
-		typeMapKassetteToDest = postgres.TypeMapKassetteToDest
-	case "PowerBI":
-		typeMapKassetteToDest = powerbi.TypeMapKassetteToDest
-	case "Anaplan":
-		typeMapKassetteToDest = anaplan.TypeMapKassetteToDest
-	}
 
 	for _, rawMap := range m {
 
@@ -247,6 +80,43 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSch
 
 		delete := false
 		for k, v := range rawPayload {
+			var convertV interface{}
+			var sourceConvSuccess bool
+			if typeMapKassetteToSrc != nil {
+				var srcDataType string
+				srcFields := srcSchema.SchemaFields
+				if len(srcFields) == 0 {
+					if !srcSkipWithNoSchema {
+						convertV = v
+						sourceConvSuccess = true
+					} else {
+						convertV = nil
+						sourceConvSuccess = false
+					}
+				} else {
+					for _, srcField := range srcFields {
+						if srcField.Name == k {
+							srcDataType = srcField.Type
+							break
+						}
+					}
+					if srcDataType != "" {
+						srcType, ok := typeMapKassetteToSrc[srcDataType]
+						if ok {
+							convertV, sourceConvSuccess = srcConverter.Convert(v, srcType)
+						} else {
+							convertV = nil
+							sourceConvSuccess = false	
+						}
+					} else {
+						convertV = nil
+						sourceConvSuccess = false
+					}
+				}
+			}
+			if !sourceConvSuccess {
+				continue
+			}
 			fieldName := k
 			hide := false
 			for _, rule := range rules {
@@ -259,29 +129,29 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSch
 						hide = true
 					}
 				} else if rule.Type == TransType["FIELDDELETING"] {
-					switch v.(type) {
+					switch convertV.(type) {
 					case int:
 						vnum, err := strconv.Atoi(rule.Value)
-						if err == nil && vnum == v.(int) {
+						if err == nil && vnum == convertV.(int) {
 							delete = true
 						}
 					case string:
-						if rule.Value == v.(string) {
+						if rule.Value == convertV.(string) {
 							delete = true
 						}
 					case bool:
-						if rule.Value == "true" && v.(bool) || rule.Value == "false" && !v.(bool) {
+						if rule.Value == "true" && convertV.(bool) || rule.Value == "false" && !convertV.(bool) {
 							delete = true
 						}
 					}
 				}
 			}
-			if !hide && typeMapKassetteToDest != nil{
+			if !hide && typeMapKassetteToDest != nil {
 				var destDataType string
 				destFields := destSchema.SchemaFields
 				if len(destFields) == 0 {
-					if destCataName != "Postgres" {
-						transformedPayload[fieldName] = v
+					if !destSkipWithNoSchema {
+						transformedPayload[fieldName] = convertV
 					}
 				} else {
 					for _, destfield := range destFields {
@@ -293,26 +163,10 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSch
 					if destDataType != "" {
 						destType, ok := typeMapKassetteToDest[destDataType]
 						if ok {
-							var convertV interface{}
-							var success bool
-							switch destType {
-							case "string":
-								convertV, success = convertToString(v)
-							case "int":
-								convertV, success = convertToInt(v)
-							case "float":
-								convertV, success = convertToFloat(v)
-							case "bool":
-								convertV, success = convertToBool(v)
-							case "number":
-								convertV, success = convertToNumber(v)
-							case "date":
-								convertV, success = convertToDate(v, srcCataName, destCataName)
-							case "datetime":
-								convertV, success = convertToDateTime(v, srcCataName, destCataName)
-							}
+							logger.Info(fmt.Sprintf("heyheyhey:!!!! %v %v", convertV, destType))
+							destConvertedV, success := destConverter.Convert(convertV, destType)
 							if success {
-								transformedPayload[fieldName] = convertV
+								transformedPayload[fieldName] = destConvertedV
 							} else {
 								transformedPayload[fieldName] = nil
 							}
@@ -336,7 +190,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destSch
 
 // Transform function is used to invoke transformer API
 // Transformer is not thread safe. So we need to create a new instance for each request
-func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, config string, srcCataName string, destCataName string, batchSize int) ResponseT {
+func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, destConfig string, destConverter integrations.TransformerHandleI, typeMapToDest map[string]string, destSkipWithNoSchema bool, srcConfig string, srcConverter sources.TransformerHandleI, typeMapToSrc map[string]string, srcSkipWithNoSchema bool, batchSize int) ResponseT {
 
 	logger.Info("Transform!!!!")
 
@@ -344,6 +198,9 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	defer trans.accessLock.Unlock()
 
 	var rules []TransformationRuleT
+	var srcConfigMap map[string]interface{}
+	var destConfigMap map[string]interface{}
+	
 	err := json.Unmarshal([]byte(ruleStr), &rules)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Error while unmarshaling transformation rules: %s", err.Error()))
@@ -352,26 +209,43 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 			Success:      false,
 		}
 	}
-
 	rules = append(rules, SystemTransformationRules...)
 
-	var configMap map[string]interface{}
-	err = json.Unmarshal([]byte(config), &configMap)
+	err = json.Unmarshal([]byte(srcConfig), &srcConfigMap)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", config, err.Error()))
+		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcConfig, err.Error()))
 		return ResponseT{
 			Events: 		[]interface{}{},
 			Success: 		false,
 		}
 	}
-
-	schema := integrations.SchemaT{}
-
-	schemaStr, ok := configMap["schema"].(string)
+	srcSchema := integrations.SchemaT{}
+	srcSchemaStr, ok := srcConfigMap["schema"].(string)
 	if ok {
-		err = json.Unmarshal([]byte(schemaStr), &schema)
+		err = json.Unmarshal([]byte(srcSchemaStr), &srcSchema)
 		if err != nil {
-			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", schemaStr, err.Error()))
+			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcSchemaStr, err.Error()))
+			return ResponseT {
+				Events:			[]interface{}{},
+				Success:		false,
+			}
+		}
+	}
+
+	err = json.Unmarshal([]byte(destConfig), &destConfigMap)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", destConfig, err.Error()))
+		return ResponseT{
+			Events: 		[]interface{}{},
+			Success: 		false,
+		}
+	}
+	destSchema := integrations.SchemaT{}
+	destSchemaStr, ok := destConfigMap["schema"].(string)
+	if ok {
+		err = json.Unmarshal([]byte(destSchemaStr), &destSchema)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", destSchemaStr, err.Error()))
 			return ResponseT {
 				Events:			[]interface{}{},
 				Success:		false,
@@ -411,7 +285,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		}
 		select {
 		//In case of batch event, index is the next Index
-		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, schema: schema, srcCataName: srcCataName, destCataName: destCataName}:
+		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, destConverter: destConverter, destSchema: destSchema, typeMapToDest: typeMapToDest, destSkipWithNoSchema: destSkipWithNoSchema, srcConverter: srcConverter, srcSchema: srcSchema, typeMapToSrc: typeMapToSrc, srcSkipWithNoSchema: srcSkipWithNoSchema}:
 			totalSent++
 			toSendData = nil
 			if inputIdx == len(clientEvents) {

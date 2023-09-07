@@ -10,3 +10,7 @@ var (
 		"DATE":			"date",
 	}
 )
+
+type TransformerHandleI interface {
+	Convert(interface{}, string) (interface{}, bool)
+}

@@ -12,6 +12,12 @@ import (
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/powerbi"
+	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/sources"
+	"kassette.ai/kassette-server/sources/camunda"
 	"log"
 	"sort"
 	"sync"
@@ -230,11 +236,42 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
 		configSubscriberLock.RLock()
 		transformRule := connectionMap[connectionID].Connection.Transforms
-		configData := connectionMap[connectionID].DestinationDetail.Destination.Config
-		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
+		srcConfigData := connectionMap[connectionID].SourceDetail.Source.Config
 		srcCatalogueName := connectionMap[connectionID].SourceDetail.Catalogue.Name
+		destConfigData := connectionMap[connectionID].DestinationDetail.Destination.Config
+		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
+
+		var typeMapKassetteToDest map[string]string
+		var destConverter integrations.TransformerHandleI
+		var destSkipWithNoSchema bool
+		var typeMapKassetteToSrc map[string]string
+		var srcConverter sources.TransformerHandleI
+		var srcSkipWithNoSchema bool
+
+		switch destCatalogueName {
+		case "Postgres":
+			typeMapKassetteToDest = postgres.TypeMapKassetteToDest
+			destConverter = &postgres.TransformerHandleT{}
+			destSkipWithNoSchema = true
+		case "PowerBI":
+			typeMapKassetteToDest = powerbi.TypeMapKassetteToDest
+			destConverter = &powerbi.TransformerHandleT{}
+			destSkipWithNoSchema = false
+		case "Anaplan":
+			typeMapKassetteToDest = anaplan.TypeMapKassetteToDest
+			destConverter = &anaplan.TransformerHandleT{}
+			destSkipWithNoSchema = false
+		}
+
+		switch srcCatalogueName {
+		case "Camunda":
+			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
+			srcConverter = &camunda.TransformerHandleT{}
+			srcSkipWithNoSchema = false
+		}
+
 		configSubscriberLock.RUnlock()
-		response := proc.transformer.Transform(destEventList, transformRule, configData, srcCatalogueName, destCatalogueName, transformBatchSize)
+		response := proc.transformer.Transform(destEventList, transformRule, destConfigData, destConverter, typeMapKassetteToDest, destSkipWithNoSchema, srcConfigData, srcConverter, typeMapKassetteToSrc, srcSkipWithNoSchema, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		
