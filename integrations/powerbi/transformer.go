@@ -10,8 +10,14 @@ type TransformerHandleT struct {}
 
 func (handleT *TransformerHandleT) toNumber(val interface{}) (interface{}, bool) {
 	switch val.(type) {
-	case int, int64:
+	case int:
 		return val.(int), true
+	case int64:
+		return val.(int64), true
+	case float32:
+		return val.(float32), true
+	case float64:
+		return val.(float64), true
 	case bool:
 		if val.(bool) {
 			return 1, true
@@ -30,10 +36,6 @@ func (handleT *TransformerHandleT) toNumber(val interface{}) (interface{}, bool)
 				return vnum, true
 			}
 		}
-	case float32:
-		return int(val.(float32)), true
-	case float64:
-		return int(val.(float64)), true
 	default:
 		return 0, false
 	}

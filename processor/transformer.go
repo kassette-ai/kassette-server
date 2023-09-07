@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"time"
 	"strconv"
 	"encoding/json"
 	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/sources"
 )
 
 var (
@@ -52,18 +52,22 @@ type transformMessageT struct {
 	destConverter			integrations.TransformerHandleI
 	typeMapToDest			map[string]string
 	destSkipWithNoSchema	bool
+	srcSchema				integrations.SchemaT
+	srcConverter			sources.TransformerHandleI
+	typeMapToSrc			map[string]string
+	srcSkipWithNoSchema		bool
 }
 
 func (trans *transformerHandleT) transformWorker() {
 
 	for job := range trans.requestQ {
 		reqArray := job.data.([]interface{})
-		respArray := transformBatchPayload(reqArray, job.rules, job.destConverter, job.destSchema, job.typeMapToDest, job.destSkipWithNoSchema)
+		respArray := transformBatchPayload(reqArray, job.rules, job.destConverter, job.destSchema, job.typeMapToDest, job.destSkipWithNoSchema, job.srcConverter, job.srcSchema, job.typeMapToSrc, job.srcSkipWithNoSchema)
 		trans.responseQ <- &transformMessageT{data: respArray, index: job.index}
 	}
 }
 
-func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destConverter integrations.TransformerHandleI, destSchema integrations.SchemaT, typeMapKassetteToDest map[string]string, destSkipWithNoSchema bool) map[string]interface{} {
+func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destConverter integrations.TransformerHandleI, destSchema integrations.SchemaT, typeMapKassetteToDest map[string]string, destSkipWithNoSchema bool, srcConverter sources.TransformerHandleI, srcSchema integrations.SchemaT, typeMapKassetteToSrc map[string]string, srcSkipWithNoSchema bool) map[string]interface{} {
 
 	rawTransform := make(map[string]interface{})
 	batchPayload := make([]interface{}, 0)
@@ -76,6 +80,43 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destCon
 
 		delete := false
 		for k, v := range rawPayload {
+			var convertV interface{}
+			var sourceConvSuccess bool
+			if typeMapKassetteToSrc != nil {
+				var srcDataType string
+				srcFields := srcSchema.SchemaFields
+				if len(srcFields) == 0 {
+					if !srcSkipWithNoSchema {
+						convertV = v
+						sourceConvSuccess = true
+					} else {
+						convertV = nil
+						sourceConvSuccess = false
+					}
+				} else {
+					for _, srcField := range srcFields {
+						if srcField.Name == k {
+							srcDataType = srcField.Type
+							break
+						}
+					}
+					if srcDataType != "" {
+						srcType, ok := typeMapKassetteToSrc[srcDataType]
+						if ok {
+							convertV, sourceConvSuccess = srcConverter.Convert(v, srcType)
+						} else {
+							convertV = nil
+							sourceConvSuccess = false	
+						}
+					} else {
+						convertV = nil
+						sourceConvSuccess = false
+					}
+				}
+			}
+			if !sourceConvSuccess {
+				continue
+			}
 			fieldName := k
 			hide := false
 			for _, rule := range rules {
@@ -88,29 +129,29 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destCon
 						hide = true
 					}
 				} else if rule.Type == TransType["FIELDDELETING"] {
-					switch v.(type) {
+					switch convertV.(type) {
 					case int:
 						vnum, err := strconv.Atoi(rule.Value)
-						if err == nil && vnum == v.(int) {
+						if err == nil && vnum == convertV.(int) {
 							delete = true
 						}
 					case string:
-						if rule.Value == v.(string) {
+						if rule.Value == convertV.(string) {
 							delete = true
 						}
 					case bool:
-						if rule.Value == "true" && v.(bool) || rule.Value == "false" && !v.(bool) {
+						if rule.Value == "true" && convertV.(bool) || rule.Value == "false" && !convertV.(bool) {
 							delete = true
 						}
 					}
 				}
 			}
-			if !hide && typeMapKassetteToDest != nil{
+			if !hide && typeMapKassetteToDest != nil {
 				var destDataType string
 				destFields := destSchema.SchemaFields
 				if len(destFields) == 0 {
 					if !destSkipWithNoSchema {
-						transformedPayload[fieldName] = v
+						transformedPayload[fieldName] = convertV
 					}
 				} else {
 					for _, destfield := range destFields {
@@ -122,24 +163,10 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destCon
 					if destDataType != "" {
 						destType, ok := typeMapKassetteToDest[destDataType]
 						if ok {
-							var convertV interface{}
-							var success bool
-							var srcConvertedV interface{}
-							if destType == "date" || destType == "datetime" {
-								parsedTime, err := time.Parse("2006-01-02T15:04:05.000Z", v.(string))
-								if err != nil {
-									logger.Info(fmt.Sprintf("Error!!!!!: %s", err.Error()))
-								} else {
-									srcConvertedV = parsedTime
-								}
-							} else {
-								srcConvertedV = v
-							}
-							logger.Info(fmt.Sprintf("HeyHeyHyeLook!: %s", srcConvertedV))
-							convertV, success = destConverter.Convert(srcConvertedV, destType)
-							logger.Info(fmt.Sprintf("Converted!: %v %v", convertV, success))
+							logger.Info(fmt.Sprintf("heyheyhey:!!!! %v %v", convertV, destType))
+							destConvertedV, success := destConverter.Convert(convertV, destType)
 							if success {
-								transformedPayload[fieldName] = convertV
+								transformedPayload[fieldName] = destConvertedV
 							} else {
 								transformedPayload[fieldName] = nil
 							}
@@ -163,7 +190,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destCon
 
 // Transform function is used to invoke transformer API
 // Transformer is not thread safe. So we need to create a new instance for each request
-func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, config string, destConverter integrations.TransformerHandleI, typeMapToDest map[string]string, destSkipWithNoSchema bool, batchSize int) ResponseT {
+func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr string, destConfig string, destConverter integrations.TransformerHandleI, typeMapToDest map[string]string, destSkipWithNoSchema bool, srcConfig string, srcConverter sources.TransformerHandleI, typeMapToSrc map[string]string, srcSkipWithNoSchema bool, batchSize int) ResponseT {
 
 	logger.Info("Transform!!!!")
 
@@ -171,6 +198,9 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	defer trans.accessLock.Unlock()
 
 	var rules []TransformationRuleT
+	var srcConfigMap map[string]interface{}
+	var destConfigMap map[string]interface{}
+	
 	err := json.Unmarshal([]byte(ruleStr), &rules)
 	if err != nil {
 		logger.Debug(fmt.Sprintf("Error while unmarshaling transformation rules: %s", err.Error()))
@@ -179,21 +209,39 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 			Success:      false,
 		}
 	}
-
 	rules = append(rules, SystemTransformationRules...)
 
-	var configMap map[string]interface{}
-	err = json.Unmarshal([]byte(config), &configMap)
+	err = json.Unmarshal([]byte(srcConfig), &srcConfigMap)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", config, err.Error()))
+		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcConfig, err.Error()))
 		return ResponseT{
 			Events: 		[]interface{}{},
 			Success: 		false,
 		}
 	}
+	srcSchema := integrations.SchemaT{}
+	srcSchemaStr, ok := srcConfigMap["schema"].(string)
+	if ok {
+		err = json.Unmarshal([]byte(srcSchemaStr), &srcSchema)
+		if err != nil {
+			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcSchemaStr, err.Error()))
+			return ResponseT {
+				Events:			[]interface{}{},
+				Success:		false,
+			}
+		}
+	}
 
+	err = json.Unmarshal([]byte(destConfig), &destConfigMap)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", destConfig, err.Error()))
+		return ResponseT{
+			Events: 		[]interface{}{},
+			Success: 		false,
+		}
+	}
 	destSchema := integrations.SchemaT{}
-	destSchemaStr, ok := configMap["schema"].(string)
+	destSchemaStr, ok := destConfigMap["schema"].(string)
 	if ok {
 		err = json.Unmarshal([]byte(destSchemaStr), &destSchema)
 		if err != nil {
@@ -237,7 +285,7 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		}
 		select {
 		//In case of batch event, index is the next Index
-		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, destConverter: destConverter, destSchema: destSchema, typeMapToDest: typeMapToDest, destSkipWithNoSchema: destSkipWithNoSchema}:
+		case reqQ <- &transformMessageT{index: inputIdx, data: toSendData, rules: rules, destConverter: destConverter, destSchema: destSchema, typeMapToDest: typeMapToDest, destSkipWithNoSchema: destSkipWithNoSchema, srcConverter: srcConverter, srcSchema: srcSchema, typeMapToSrc: typeMapToSrc, srcSkipWithNoSchema: srcSkipWithNoSchema}:
 			totalSent++
 			toSendData = nil
 			if inputIdx == len(clientEvents) {

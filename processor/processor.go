@@ -16,6 +16,8 @@ import (
 	"kassette.ai/kassette-server/integrations/postgres"
 	"kassette.ai/kassette-server/integrations/powerbi"
 	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/sources"
+	"kassette.ai/kassette-server/sources/camunda"
 	"log"
 	"sort"
 	"sync"
@@ -234,11 +236,18 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		logger.Info(fmt.Sprintf("Transform input size: %d", len(destEventList)))
 		configSubscriberLock.RLock()
 		transformRule := connectionMap[connectionID].Connection.Transforms
-		configData := connectionMap[connectionID].DestinationDetail.Destination.Config
+		srcConfigData := connectionMap[connectionID].SourceDetail.Source.Config
+		srcCatalogueName := connectionMap[connectionID].SourceDetail.Catalogue.Name
+		destConfigData := connectionMap[connectionID].DestinationDetail.Destination.Config
 		destCatalogueName := connectionMap[connectionID].DestinationDetail.Catalogue.Name
+
 		var typeMapKassetteToDest map[string]string
 		var destConverter integrations.TransformerHandleI
 		var destSkipWithNoSchema bool
+		var typeMapKassetteToSrc map[string]string
+		var srcConverter sources.TransformerHandleI
+		var srcSkipWithNoSchema bool
+
 		switch destCatalogueName {
 		case "Postgres":
 			typeMapKassetteToDest = postgres.TypeMapKassetteToDest
@@ -253,8 +262,16 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			destConverter = &anaplan.TransformerHandleT{}
 			destSkipWithNoSchema = false
 		}
+
+		switch srcCatalogueName {
+		case "Camunda":
+			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
+			srcConverter = &camunda.TransformerHandleT{}
+			srcSkipWithNoSchema = false
+		}
+
 		configSubscriberLock.RUnlock()
-		response := proc.transformer.Transform(destEventList, transformRule, configData, destConverter, typeMapKassetteToDest, destSkipWithNoSchema, transformBatchSize)
+		response := proc.transformer.Transform(destEventList, transformRule, destConfigData, destConverter, typeMapKassetteToDest, destSkipWithNoSchema, srcConfigData, srcConverter, typeMapKassetteToSrc, srcSkipWithNoSchema, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
 		
