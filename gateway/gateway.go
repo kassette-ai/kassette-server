@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	stats "kassette.ai/kassette-server/services"
 	"log"
 	"net/http"
 	"regexp"
@@ -23,15 +24,15 @@ import (
 	"github.com/tidwall/sjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/errors"
+	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/integrations/postgres"
+	"kassette.ai/kassette-server/integrations/powerbi"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
+	"kassette.ai/kassette-server/sources"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
-	"kassette.ai/kassette-server/integrations/postgres"
-	"kassette.ai/kassette-server/integrations/powerbi"
-	"kassette.ai/kassette-server/integrations/anaplan"
-	"kassette.ai/kassette-server/sources"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -105,6 +106,9 @@ type HandleT struct {
 
 	userWorkerBatchRequestQ      chan *userWorkerBatchRequestT
 	batchUserWorkerBatchRequestQ chan *batchUserWorkerBatchRequestT
+	sourceSuccess                *stats.KassetteStats
+	sourceFailure                *stats.KassetteStats
+	sourceDisabled               *stats.KassetteStats
 }
 
 type webRequestT struct {
@@ -186,6 +190,10 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, configDB *backendconfig.Ha
 
 	gateway.userWorkerBatchRequestQ = make(chan *userWorkerBatchRequestT, maxDBBatchSize)
 	gateway.batchUserWorkerBatchRequestQ = make(chan *batchUserWorkerBatchRequestT, maxDBWriterProcess)
+
+	gateway.sourceSuccess = stats.NewStat("source.success")
+	gateway.sourceFailure = stats.NewStat("source.failure")
+	gateway.sourceSuccess = stats.NewStat("source.disabled")
 
 	go gateway.webRequestBatcher()
 
@@ -446,7 +454,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.GET("/field-options", func(c* gin.Context) {
+	r.GET("/field-options", func(c *gin.Context) {
 		cataType := c.Query("type")
 		name := c.Query("name")
 		if cataType == "destination" {
