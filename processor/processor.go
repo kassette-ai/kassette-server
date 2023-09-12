@@ -117,7 +117,7 @@ func (proc *HandleT) mainLoop() {
 				newStatus := jobsdb.JobStatusT{
 					JobID:         batchEvent.JobID,
 					JobState:      jobsdb.ExecutingState,
-					AttemptNum:    1,
+					AttemptNum:    batchEvent.LastJobStatus.AttemptNum + 1,
 					ExecTime:      time.Now(),
 					RetryTime:     time.Now(),
 					ErrorCode:     "200",
@@ -218,7 +218,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		newStatus := jobsdb.JobStatusT{
 			JobID:         batchEvent.JobID,
 			JobState:      jobsdb.SucceededState,
-			AttemptNum:    1,
+			AttemptNum:    batchEvent.LastJobStatus.AttemptNum + 1,
 			ExecTime:      time.Now(),
 			RetryTime:     time.Now(),
 			ErrorCode:     "200",

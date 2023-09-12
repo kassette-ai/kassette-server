@@ -12,9 +12,11 @@ import (
 	"kassette.ai/kassette-server/integrations/postgres"
 	"kassette.ai/kassette-server/integrations/powerbi"
 	"kassette.ai/kassette-server/integrations/anaplan"
+	"kassette.ai/kassette-server/integrations"
 	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/utils"
 	"github.com/tidwall/gjson"
+	"github.com/google/uuid"
 )
 
 var (
@@ -55,7 +57,7 @@ type DBHandleI interface{
 
 type RestHandleI interface{
 	Init(string) bool
-	Send(json.RawMessage, map[string]interface{}) (int, json.RawMessage)
+	Send(json.RawMessage, map[string]interface{}) (int, string, []interface{})
 }
 
 type DestinationRouterT struct{
@@ -66,12 +68,14 @@ type DestinationRouterT struct{
 
 type JobProcessRequestT struct{
 	JobID					int64								`json:"JobID"`
+	AttemptNum				int									`json:"AttemptNum"`
 	DestinationID			int									`json:"DestinationID"`
 	EventPayload			json.RawMessage						`json:"EventPayload"`
 }
 
 type JobProcessResponseT struct{
 	JobID			int64					`json:"JobID"`
+	AttemptNum		int						`json:"AttemptNum"`
 	State			string					`json:"State"`
 	ErrorCode		string					`json:"ErrorCode"`
 	ErrorResponse	json.RawMessage			`json:"ErrorResponse"`
@@ -83,6 +87,26 @@ type HandleT struct {
 	JobProcessRequestQ			chan *JobProcessRequestT
 	JobProcessBatchRequestQ		chan *JobProcessRequestT
 	JobProcessResponseQ			chan *JobProcessResponseT
+}
+
+func (router *HandleT) CreateNewJobWithFailedEvents(events []interface{}, destinationID int) {
+	batchPayload := integrations.BatchPayloadT{}
+	batchPayload.Payload = events
+	batchPayloadArr := []interface{}{batchPayload}
+	destBatchPayload, _ := json.Marshal(batchPayloadArr)
+	id := uuid.New()
+	newJob := jobsdb.JobT{
+		UUID:         id,
+		Parameters:   []byte(fmt.Sprintf(`{"destination_id": "%v"}`, destinationID)),
+		CreatedAt:    time.Now(),
+		ExpireAt:     time.Now(),
+		CustomVal:    "",
+		EventPayload: destBatchPayload,
+	}
+	destJobs := []*jobsdb.JobT{&newJob}
+	router.JobsDB.Store(destJobs)
+
+	logger.Info(fmt.Sprintf("Storing Failed Jobs: %v", newJob))
 }
 
 func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
@@ -170,29 +194,36 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 			destRouter := destinationRouterMap[destID]
 			var errorCode string
 			var state string
-			var errorResponse []byte
+			errMsgMap := map[string]string{}
 			if !destRouter.Enabled {
-				errorCode = ""
-				errorResponse = []byte(`{"error": "Destination Config Disabled"}`)
+				errorCode = "500"
+				errMsgMap["error"] = "Destination Config Disabled"
 				state = jobsdb.FailedState
 			} else {
 				configMap := map[string]interface{}{
 					"JobID": jobRequest.JobID,
 				}
-				statusCodeInt, err := destRouter.RestHandle.Send(jobRequest.EventPayload, configMap)
-				errorResponse = err
+				statusCodeInt, errMsg, failedJobs := destRouter.RestHandle.Send(jobRequest.EventPayload, configMap)
+				logger.Info(fmt.Sprintf("heyheyhye: %v %v %v", statusCodeInt, errMsg, failedJobs))
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {
+					errMsgMap["error"] = errMsg
 					state = jobsdb.FailedState
 				} else {
+					errMsgMap["success"] = "OK"
 					state = jobsdb.SucceededState
+					if len(failedJobs) > 0 { 
+						router.CreateNewJobWithFailedEvents(failedJobs, destID)
+					}
 				}
 			}
+			errMsgMapStr, _ := json.Marshal(errMsgMap)
 			router.JobProcessResponseQ <- &JobProcessResponseT{
 				JobID: jobRequest.JobID,
+				AttemptNum: jobRequest.AttemptNum + 1,
 				State: state,
 				ErrorCode: errorCode,
-				ErrorResponse: errorResponse,
+				ErrorResponse: []byte(errMsgMapStr),
 			}
 			destinationBatchMutexMap[destID].Unlock()
 		}
@@ -220,7 +251,8 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 				destRouter := destinationRouterMap[firstDestID]
 				jobProcesses := batchJobProcessMap[firstDestID]
 				if destinationDetailMap[firstDestID].Catalogue.Access == backendconfig.DestAccessType["DBPOLLING"] {
-					var errMsg string
+					succeeded := true
+					errMsgMap := map[string]string{}
 					if destRouter.Enabled {
 						payloads := []json.RawMessage{}
 						for _, jobProcess := range jobProcesses {
@@ -228,26 +260,32 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 						}
 						err := destRouter.DBHandle.InsertPayloadInTransaction(payloads)
 						if err != nil {
-							errMsg = err.Error()
-							logger.Error(errMsg)
+							errMsgMap["error"] = err.Error()
+							succeeded = false
+						} else {
+							errMsgMap["success"] = "OK"
 						}
 					} else {
-						errMsg = "Destination NOT ENABLED"
+						errMsgMap["error"] = "Destination NOT ENABLED"
+						succeeded = false
 					}
+					errMsgMapStr, _ := json.Marshal(errMsgMap)
 					for _, jobProcess := range jobProcesses {
-						if errMsg == "" {
+						if succeeded {
 							router.JobProcessResponseQ <- &JobProcessResponseT{
 								JobID: jobProcess.JobID,
+								AttemptNum: jobProcess.AttemptNum + 1,
 								State: jobsdb.SucceededState,
 								ErrorCode: "200",
-								ErrorResponse: []byte(`{"success":"OK"}`),
+								ErrorResponse: []byte(errMsgMapStr),
 							}
 						} else {
 							router.JobProcessResponseQ <- &JobProcessResponseT{
 								JobID: jobProcess.JobID,
+								AttemptNum: jobProcess.AttemptNum + 1,
 								State: jobsdb.FailedState,
-								ErrorCode: "",
-								ErrorResponse: []byte(`{"error":"DB Ingestion Failed"}`),
+								ErrorCode: "500",
+								ErrorResponse: []byte(errMsgMapStr),
 							}
 						}
 					}
@@ -269,7 +307,7 @@ func (router *HandleT) JobsResponseWorker() {
 			newStatus := &jobsdb.JobStatusT{
 				JobID:         jobResponse.JobID,
 				JobState:      jobResponse.State,
-				AttemptNum:    1,
+				AttemptNum:    jobResponse.AttemptNum,
 				ExecTime:      time.Now(),
 				RetryTime:     time.Now(),
 				ErrorCode:     jobResponse.ErrorCode,
@@ -307,7 +345,7 @@ func (router *HandleT) JobsRequestWorker() {
 			newStatus := jobsdb.JobStatusT{
 				JobID:         batchEvent.JobID,
 				JobState:      jobsdb.ExecutingState,
-				AttemptNum:    1,
+				AttemptNum:    batchEvent.LastJobStatus.AttemptNum + 1,
 				ExecTime:      time.Now(),
 				RetryTime:     time.Now(),
 				ErrorCode:     "200",
@@ -317,6 +355,7 @@ func (router *HandleT) JobsRequestWorker() {
 			destinationID := int(gjson.Get(string(batchEvent.Parameters), "destination_id").Int())
 			router.JobProcessRequestQ <- &JobProcessRequestT{
 				JobID: batchEvent.JobID,
+				AttemptNum: batchEvent.LastJobStatus.AttemptNum,
 				DestinationID: destinationID,
 				EventPayload: batchEvent.EventPayload,
 			}

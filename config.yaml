@@ -8,6 +8,7 @@ database:
 logLevel: INFO
 jobdb:
   maxDSJobs: 10
+  maxRetryNumber: 10
 gateway:
   allowReqsWithoutUserIDAndAnonymousID: true
   batchTimeoutInMS: 2000
