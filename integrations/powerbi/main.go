@@ -94,7 +94,8 @@ func (handle *HandleT) Init(config string) bool {
 	return true
 }
 
-func (handle *HandleT) Send(payload json.RawMessage, _ map[string]interface{}) (int, json.RawMessage) {
+func (handle *HandleT) Send(payload json.RawMessage, _ map[string]interface{}) (int, string, []interface{}) {
+	var failedJobs = []interface{}{}
 	var BatchPayloadMapList []integrations.BatchPayloadT
 	payloads := []interface{}{}
 	json.Unmarshal(payload, &BatchPayloadMapList)
@@ -106,7 +107,7 @@ func (handle *HandleT) Send(payload json.RawMessage, _ map[string]interface{}) (
 	req, err := http.NewRequest(handle.Method, handle.getFullUrl(), bytes.NewBuffer(payloadData))
 	logger.Info(fmt.Sprintf("Full Url: %s", handle.getFullUrl()))
 	if err != nil {
-		return 500, []byte(fmt.Sprintf(`{"error": %s}`, err.Error()))
+		return 500, err.Error(), failedJobs
 	}
 	
 	for k, v := range handle.Header {
@@ -116,12 +117,12 @@ func (handle *HandleT) Send(payload json.RawMessage, _ map[string]interface{}) (
 	resp, err := handle.Client.Do(req)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Rest API job has been failed. Error: %s", err.Error()))
-		return 500, []byte(fmt.Sprintf(`{"error: "%s"}`, err.Error()))
+		return 500, err.Error(), failedJobs
 	}
 	if resp.StatusCode != 200 && resp.StatusCode != 202 {
 		body, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, body
+		return resp.StatusCode, string(body), failedJobs
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, []byte(`{"status": "ok"}`)
+	return resp.StatusCode, "", failedJobs
 }
