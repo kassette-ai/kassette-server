@@ -50,6 +50,19 @@ type HandleT struct {
 	Client			*http.Client
 }
 
+type FailureResponseT struct {
+	RequestIndex			int					`json:"requestIndex"`
+	FailureType				string				`json:"failureType"`
+	FailureMessageDetails	string				`json:"failureMessageDetails"`
+}
+
+type ResponseT struct {
+	Added			int					`json:"added"`
+	Ignored			int					`json:"ignored"`
+	Total			int					`json:"total"`
+	Failures		[]FailureResponseT	`json:"failures"`
+}
+
 func (handle *HandleT) getFullUrl() string {
 	if handle.Query == "" {
 		return handle.Url
@@ -172,16 +185,19 @@ func (handle *HandleT) Init(config string) bool {
 	}
 }
 
-func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface{}) (int, json.RawMessage) {
+func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface{}) (int, string, []interface{}) {
+	var failedJobs = []interface{}{}
 	var BatchPayloadMapList []integrations.BatchPayloadT
+	var idx = 0
 	payloads := []map[string]interface{}{}
 	json.Unmarshal(payload, &BatchPayloadMapList)
 	for _, batchPayload := range BatchPayloadMapList {
-		for idx, singleEvent := range batchPayload.Payload {
+		for _, singleEvent := range batchPayload.Payload {
 			anaPlanPayload := map[string]interface{}{}
 			anaPlanPayload["code"] = fmt.Sprintf("%v-%v", config["JobID"], idx)
 			anaPlanPayload["properties"] = singleEvent
 			payloads = append(payloads, anaPlanPayload)
+			idx ++
 		}
 	}
 	itemsPayload := map[string]interface{}{"items": payloads}
@@ -190,7 +206,7 @@ func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface
 	req, err := http.NewRequest(handle.Method, handle.getFullUrl(), bytes.NewBuffer(payloadData))
 	logger.Info(fmt.Sprintf("Full Url: %s", handle.getFullUrl()))
 	if err != nil {
-		return 500, []byte(fmt.Sprintf(`{"error": %s}`, err.Error()))
+		return 500, err.Error(), failedJobs
 	}
 	
 	for k, v := range handle.Header {
@@ -202,12 +218,24 @@ func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface
 	resp, err := handle.Client.Do(req)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Rest API job has been failed. Error: %s", err.Error()))
-		return resp.StatusCode, []byte(fmt.Sprintf(`{"error: "%s"}`, err.Error()))
+		return resp.StatusCode, err.Error(), failedJobs
 	}
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 && resp.StatusCode != 202 {
-		body, _ := io.ReadAll(resp.Body)
-		return resp.StatusCode, body
+		return resp.StatusCode, string(body), failedJobs
+	} else {
+		var ResponseMap ResponseT
+		json.Unmarshal(body, &ResponseMap)
+		if ResponseMap.Added == 0 {
+			errMsgStr, _ := json.Marshal(ResponseMap.Failures)
+			return 500, string(errMsgStr), failedJobs
+		} else {
+			for _, failure := range ResponseMap.Failures {
+				failedPayload := payloads[failure.RequestIndex]
+				failedJobs = append(failedJobs, failedPayload["properties"])
+			}
+		}
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, []byte(`{"status": "ok"}`)
+	return resp.StatusCode, "", failedJobs
 }
