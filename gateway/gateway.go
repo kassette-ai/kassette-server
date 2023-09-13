@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/bugsnag/bugsnag-go"
 	"io"
 	stats "kassette.ai/kassette-server/services"
 	"log"
@@ -233,6 +234,7 @@ func (gateway *HandleT) startWebHandler() {
 		catalogue, err := gateway.configDB.GetServiceCatalogueByID(service_id)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+			bugsnag.Notify(err)
 		} else {
 			c.JSON(http.StatusOK, catalogue)
 		}
@@ -502,6 +504,7 @@ func (gateway *HandleT) ProcessAgentRequest(payload string, writeKey string) str
 func (gateway *HandleT) ProcessRequest(c *gin.Context, reqType string) {
 	payload, writeKey, err := gateway.getPayloadAndWriteKey(c.Request)
 	if err != nil {
+		bugsnag.Notify(err)
 		logger.Error(fmt.Sprintf("Error getting payload and write key. Error: %s", err.Error()))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

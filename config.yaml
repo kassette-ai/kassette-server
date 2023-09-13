@@ -1,5 +1,5 @@
 database:
-  host: kassette-server-postgresql-hl
+  host: localhost
   name: kassette
   password: password
   port: 5432
@@ -32,3 +32,7 @@ router:
   updateStatusBatchSize: 10
   useTestSink: false
 serverPort: 8088
+
+bugsnag:
+  apiKey: bb2037623e9652894babeec20b4e57e4
+  stage: alpha

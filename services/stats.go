@@ -56,6 +56,7 @@ func NewStat(Name string) (kStats *KassetteStats) {
 
 func (kStats *KassetteStats) Increment(name string, count int) {
 	kStats.Sink.SetGauge([]string{name}, float32(count))
+
 }
 
 type KassetteStats struct {

@@ -3,6 +3,7 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bugsnag/bugsnag-go"
 	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/integrations/anaplan"
@@ -188,6 +189,7 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				errorResponse = err
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {
+					bugsnag.Notify(fmt.Errorf("Error occurred while sending payload to destination. Error: %s", string(errorResponse)))
 					state = jobsdb.FailedState
 				} else {
 					state = jobsdb.SucceededState
@@ -233,10 +235,12 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 						}
 						err := destRouter.DBHandle.InsertPayloadInTransaction(payloads)
 						if err != nil {
+							bugsnag.Notify(err)
 							errMsg = err.Error()
 							logger.Error(errMsg)
 						}
 					} else {
+
 						errMsg = "Destination NOT ENABLED"
 					}
 					for _, jobProcess := range jobProcesses {
