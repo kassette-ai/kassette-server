@@ -1,38 +1,40 @@
 package router
 
 import (
-	"fmt"
-	"time"
-	"sort"
-	"sync"
-	"strconv"
 	"encoding/json"
-	jobsdb "kassette.ai/kassette-server/jobs"
+	"fmt"
+	"github.com/bugsnag/bugsnag-go"
+	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/integrations/anaplan"
 	"kassette.ai/kassette-server/integrations/postgres"
 	"kassette.ai/kassette-server/integrations/powerbi"
-	"kassette.ai/kassette-server/integrations/anaplan"
-	"kassette.ai/kassette-server/integrations"
-	"kassette.ai/kassette-server/utils/logger"
+	jobsdb "kassette.ai/kassette-server/jobs"
+	stats "kassette.ai/kassette-server/services"
 	"kassette.ai/kassette-server/utils"
-	"github.com/tidwall/gjson"
-	"github.com/google/uuid"
+	"kassette.ai/kassette-server/utils/logger"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
 )
 
 var (
-	DB_BATCH_FETCH_SIZE			int
-	MAX_PROCESS_WORKER			int
-	MAX_BATCH_PAYLOAD_SIZE		int
-	BATCH_JOB_PROCESS_TIMEOUT	time.Duration
-	JOB_RESPONSE_BATCH_TIMEOUT	time.Duration
+	DB_BATCH_FETCH_SIZE        int
+	MAX_PROCESS_WORKER         int
+	MAX_BATCH_PAYLOAD_SIZE     int
+	BATCH_JOB_PROCESS_TIMEOUT  time.Duration
+	JOB_RESPONSE_BATCH_TIMEOUT time.Duration
 
-	destinationDetailMap		map[int]backendconfig.DestinationDetailT
-	destinationRouterMap		map[int]DestinationRouterT
-	destinationMutexMap   		map[int]*sync.RWMutex
-	destinationBatchMutexMap	map[int]*sync.RWMutex
-	batchJobProcessMap			map[int][]JobProcessRequestT
-	lastProcessTimeMap			map[int]time.Time
-	jobResponseBatch			[]*jobsdb.JobStatusT				
+	destinationDetailMap     map[int]backendconfig.DestinationDetailT
+	destinationRouterMap     map[int]DestinationRouterT
+	destinationMutexMap      map[int]*sync.RWMutex
+	destinationBatchMutexMap map[int]*sync.RWMutex
+	batchJobProcessMap       map[int][]JobProcessRequestT
+	lastProcessTimeMap       map[int]time.Time
+	jobResponseBatch         []*jobsdb.JobStatusT
 )
 
 func init() {
@@ -48,45 +50,49 @@ func init() {
 	batchJobProcessMap = map[int][]JobProcessRequestT{}
 	lastProcessTimeMap = map[int]time.Time{}
 	jobResponseBatch = []*jobsdb.JobStatusT{}
+
 }
 
-type DBHandleI interface{
+type DBHandleI interface {
 	Connect(string) bool
 	InsertPayloadInTransaction([]json.RawMessage) error
 }
 
-type RestHandleI interface{
+type RestHandleI interface {
 	Init(string) bool
 	Send(json.RawMessage, map[string]interface{}) (int, string, []interface{})
 }
 
-type DestinationRouterT struct{
-	DBHandle				DBHandleI				`json:"DBHandle"`
-	RestHandle				RestHandleI				`json:"RestHandle"`
-	Enabled					bool					`json:"Enabled"`
+type DestinationRouterT struct {
+	DBHandle   DBHandleI   `json:"DBHandle"`
+	RestHandle RestHandleI `json:"RestHandle"`
+	Enabled    bool        `json:"Enabled"`
 }
 
-type JobProcessRequestT struct{
-	JobID					int64								`json:"JobID"`
-	AttemptNum				int									`json:"AttemptNum"`
-	DestinationID			int									`json:"DestinationID"`
-	EventPayload			json.RawMessage						`json:"EventPayload"`
+type JobProcessRequestT struct {
+	JobID         int64           `json:"JobID"`
+	AttemptNum    int             `json:"AttemptNum"`
+	DestinationID int             `json:"DestinationID"`
+	EventPayload  json.RawMessage `json:"EventPayload"`
 }
 
-type JobProcessResponseT struct{
-	JobID			int64					`json:"JobID"`
-	AttemptNum		int						`json:"AttemptNum"`
-	State			string					`json:"State"`
-	ErrorCode		string					`json:"ErrorCode"`
-	ErrorResponse	json.RawMessage			`json:"ErrorResponse"`
+type JobProcessResponseT struct {
+	JobID         int64           `json:"JobID"`
+	AttemptNum    int             `json:"AttemptNum"`
+	State         string          `json:"State"`
+	ErrorCode     string          `json:"ErrorCode"`
+	ErrorResponse json.RawMessage `json:"ErrorResponse"`
 }
 
 type HandleT struct {
-	JobsDB						*jobsdb.HandleT
-	ConfigDB					*backendconfig.HandleT
-	JobProcessRequestQ			chan *JobProcessRequestT
-	JobProcessBatchRequestQ		chan *JobProcessRequestT
-	JobProcessResponseQ			chan *JobProcessResponseT
+	JobsDB                  *jobsdb.HandleT
+	ConfigDB                *backendconfig.HandleT
+	JobProcessRequestQ      chan *JobProcessRequestT
+	JobProcessBatchRequestQ chan *JobProcessRequestT
+	JobProcessResponseQ     chan *JobProcessResponseT
+	destFailure             *stats.KassetteStats
+	destSuccess             *stats.KassetteStats
+	destDisabled            *stats.KassetteStats
 }
 
 func (router *HandleT) CreateNewJobWithFailedEvents(events []interface{}, destinationID int) {
@@ -128,7 +134,7 @@ func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
 			status := dbHandle.Connect(newDetail.Destination.Config)
 			destinationRouterMap[destinationID] = DestinationRouterT{
 				DBHandle: dbHandle,
-				Enabled: status,
+				Enabled:  status,
 			}
 			destinationMutexMap[destinationID].Unlock()
 		}
@@ -148,7 +154,7 @@ func UpdateRouterConfig(connection backendconfig.ConnectionDetailT) {
 			status := restHandle.Init(newDetail.Destination.Config)
 			destinationRouterMap[destinationID] = DestinationRouterT{
 				RestHandle: restHandle,
-				Enabled: status,
+				Enabled:    status,
 			}
 			destinationMutexMap[destinationID].Unlock()
 		}
@@ -196,9 +202,11 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 			var state string
 			errMsgMap := map[string]string{}
 			if !destRouter.Enabled {
+
 				errorCode = "500"
 				errMsgMap["error"] = "Destination Config Disabled"
 				state = jobsdb.FailedState
+
 			} else {
 				configMap := map[string]interface{}{
 					"JobID": jobRequest.JobID,
@@ -207,22 +215,27 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				logger.Info(fmt.Sprintf("heyheyhye: %v %v %v", statusCodeInt, errMsg, failedJobs))
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {
+
+					bugsnag.Notify(fmt.Errorf("Error occurred while sending payload to destination. Error: %s", errMsg))
+
 					errMsgMap["error"] = errMsg
+
 					state = jobsdb.FailedState
 				} else {
 					errMsgMap["success"] = "OK"
 					state = jobsdb.SucceededState
-					if len(failedJobs) > 0 { 
+					if len(failedJobs) > 0 {
 						router.CreateNewJobWithFailedEvents(failedJobs, destID)
 					}
 				}
 			}
 			errMsgMapStr, _ := json.Marshal(errMsgMap)
 			router.JobProcessResponseQ <- &JobProcessResponseT{
-				JobID: jobRequest.JobID,
-				AttemptNum: jobRequest.AttemptNum + 1,
-				State: state,
-				ErrorCode: errorCode,
+
+				JobID:         jobRequest.JobID,
+				AttemptNum:    jobRequest.AttemptNum + 1,
+				State:         state,
+				ErrorCode:     errorCode,
 				ErrorResponse: []byte(errMsgMapStr),
 			}
 			destinationBatchMutexMap[destID].Unlock()
@@ -247,7 +260,7 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 					destinationMutexMap[firstDestID] = &sync.RWMutex{}
 				}
 				destinationMutexMap[firstDestID].RLock()
-				destinationBatchMutexMap[firstDestID].RLock()			
+				destinationBatchMutexMap[firstDestID].RLock()
 				destRouter := destinationRouterMap[firstDestID]
 				jobProcesses := batchJobProcessMap[firstDestID]
 				if destinationDetailMap[firstDestID].Catalogue.Access == backendconfig.DestAccessType["DBPOLLING"] {
@@ -260,6 +273,7 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 						}
 						err := destRouter.DBHandle.InsertPayloadInTransaction(payloads)
 						if err != nil {
+
 							errMsgMap["error"] = err.Error()
 							succeeded = false
 						} else {
@@ -268,23 +282,27 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 					} else {
 						errMsgMap["error"] = "Destination NOT ENABLED"
 						succeeded = false
+
 					}
 					errMsgMapStr, _ := json.Marshal(errMsgMap)
 					for _, jobProcess := range jobProcesses {
+
 						if succeeded {
 							router.JobProcessResponseQ <- &JobProcessResponseT{
-								JobID: jobProcess.JobID,
-								AttemptNum: jobProcess.AttemptNum + 1,
-								State: jobsdb.SucceededState,
-								ErrorCode: "200",
+								JobID:         jobProcess.JobID,
+								AttemptNum:    jobProcess.AttemptNum + 1,
+								State:         jobsdb.SucceededState,
+								ErrorCode:     "200",
 								ErrorResponse: []byte(errMsgMapStr),
 							}
 						} else {
+							router.destFailure.Increment(strconv.Itoa(jobProcess.DestinationID), 1)
 							router.JobProcessResponseQ <- &JobProcessResponseT{
-								JobID: jobProcess.JobID,
-								AttemptNum: jobProcess.AttemptNum + 1,
-								State: jobsdb.FailedState,
-								ErrorCode: "500",
+
+								JobID:         jobProcess.JobID,
+								AttemptNum:    jobProcess.AttemptNum + 1,
+								State:         jobsdb.FailedState,
+								ErrorCode:     "500",
 								ErrorResponse: []byte(errMsgMapStr),
 							}
 						}
@@ -302,7 +320,7 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 func (router *HandleT) JobsResponseWorker() {
 	logger.Info(fmt.Sprintf("Router Job Response Worker started!"))
 	for {
-		select{
+		select {
 		case jobResponse := <-router.JobProcessResponseQ:
 			newStatus := &jobsdb.JobStatusT{
 				JobID:         jobResponse.JobID,
@@ -327,7 +345,7 @@ func (router *HandleT) JobsRequestWorker() {
 		retryList := router.JobsDB.GetToRetry([]string{}, DB_BATCH_FETCH_SIZE)
 		unprocessedList := router.JobsDB.GetUnprocessed([]string{}, DB_BATCH_FETCH_SIZE)
 
-		if len(unprocessedList) + len(retryList) == 0 {
+		if len(unprocessedList)+len(retryList) == 0 {
 			logger.Debug("No unprocessed or retry router jobs to process")
 			time.Sleep(2 * time.Second)
 			continue
@@ -354,10 +372,11 @@ func (router *HandleT) JobsRequestWorker() {
 			statusList = append(statusList, &newStatus)
 			destinationID := int(gjson.Get(string(batchEvent.Parameters), "destination_id").Int())
 			router.JobProcessRequestQ <- &JobProcessRequestT{
-				JobID: batchEvent.JobID,
+				JobID:      batchEvent.JobID,
 				AttemptNum: batchEvent.LastJobStatus.AttemptNum,
+
 				DestinationID: destinationID,
-				EventPayload: batchEvent.EventPayload,
+				EventPayload:  batchEvent.EventPayload,
 			}
 		}
 		router.JobsDB.UpdateJobStatus(statusList, []string{})
@@ -369,12 +388,16 @@ func (router *HandleT) Setup(jobsDB *jobsdb.HandleT, configDB *backendconfig.Han
 	router.ConfigDB = configDB
 	router.JobProcessRequestQ = make(chan *JobProcessRequestT, MAX_PROCESS_WORKER)
 	router.JobProcessResponseQ = make(chan *JobProcessResponseT, MAX_PROCESS_WORKER)
-	
+
+	router.destFailure = stats.NewStat("dest.failure")
+	router.destSuccess = stats.NewStat("dest.success")
+	router.destDisabled = stats.NewStat("dest.disabled")
+
 	logger.Info("Router Started!")
 	go BackendConfigSubscriber()
 
 	go router.JobsRequestWorker()
-	for i := 0 ; i < MAX_PROCESS_WORKER ; i++ {
+	for i := 0; i < MAX_PROCESS_WORKER; i++ {
 		go router.ProcessRouterJobs(i)
 	}
 	go router.ProcessBatchRouterJobs()

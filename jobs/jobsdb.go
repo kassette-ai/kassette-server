@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/bugsnag/bugsnag-go"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/spf13/viper"
@@ -89,7 +90,7 @@ type HandleT struct {
 	enableWriterQueue  bool
 	enableReaderQueue  bool
 	clearAll           bool
-	softDeletion	   bool
+	softDeletion       bool
 	dsLimit            *int
 	maxReaders         int
 	maxWriters         int
@@ -174,6 +175,7 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	err = jd.dbHandle.Ping()
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("Failed to ping DB. ", err, psqlInfo))
+		bugsnag.Notify(err)
 	} else {
 		logger.Info("Connected to DB")
 	}
@@ -343,7 +345,7 @@ func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT, startSeque
 	if len(dsList) == 0 {
 		newDSIdx = "1"
 	} else {
-		lastDS := dsList[len(dsList) - 1]
+		lastDS := dsList[len(dsList)-1]
 		lastDSIdxInt, _ := strconv.Atoi(lastDS.Index)
 		newDSIdx = strconv.Itoa(lastDSIdxInt + 1)
 	}
@@ -389,6 +391,7 @@ func (jd *HandleT) storeJobDS(ds dataSetT, job *JobT) (errorMessage string) {
 		return
 	}
 	pqErr := err.(*pq.Error)
+	bugsnag.Notify(err)
 	logger.Error(fmt.Sprintf("Failed to store job: %s", pqErr))
 	return pqErr.Message
 }
@@ -417,12 +420,14 @@ func (jd *HandleT) updateJobStatusDS(ds dataSetT, statusList []*JobStatusT, cust
 	_, err = stmt.Exec()
 
 	if err != nil {
+		bugsnag.Notify(err)
 		return err
 	}
 
 	err = txn.Commit()
 
 	if err != nil {
+		bugsnag.Notify(err)
 		return err
 	}
 
@@ -448,12 +453,14 @@ func (jd *HandleT) getNumberOfTotalJobs(ds dataSetT) (int, error) {
 	var count int
 	rows, err := jd.dbHandle.Query(countQuery)
 	if err != nil {
+		bugsnag.Notify(err)
 		logger.Error(fmt.Sprintf("Failed to retrieve the number of total jobs in %s. Error: %s", ds.JobTable, err))
 		return 0, err
 	}
 	for rows.Next() {
 		err := rows.Scan(&count)
 		if err != nil {
+			bugsnag.Notify(err)
 			logger.Error(fmt.Sprintf("Failed to retrieve the number of total jobs in %s. Error: %s", ds.JobTable, err))
 			return 0, err
 		}
@@ -520,6 +527,7 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll boo
 
 		rows, err = jd.dbHandle.Query(sqlStatement)
 		if err != nil {
+			bugsnag.Notify(err)
 			return nil, err
 		}
 		defer rows.Close()
@@ -546,6 +554,7 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll boo
 		stmt, err := jd.dbHandle.Prepare(sqlStatement)
 
 		if err != nil {
+			bugsnag.Notify(err)
 			return nil, err
 		}
 
@@ -564,6 +573,7 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll boo
 			&job.LastJobStatus.ErrorCode, &job.LastJobStatus.ErrorResponse)
 
 		if err != nil {
+			bugsnag.Notify(err)
 			return nil, err
 		}
 
@@ -595,6 +605,7 @@ func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string,
 	for _, ds := range dsList {
 		jobs, err := jd.getProcessedJobsDS(ds, false, false, stateFilter, customValFilters, count, sourceIDFilters...)
 		if err != nil {
+			bugsnag.Notify(err)
 			logger.Error(fmt.Sprintf("Error getting processed jobs from ds: %s", ds.JobTable))
 			continue
 		}
@@ -630,6 +641,7 @@ func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceID
 
 		jobs, err := jd.getUnprocessedJobsDS(ds, customValFilters, true, count)
 		if err != nil {
+			bugsnag.Notify(err)
 			log.Fatal("Failed to get unprocessed jobs", err)
 		}
 
@@ -690,6 +702,7 @@ func (jd *HandleT) storeJobsDS(ds dataSetT, copyID bool, retryEach bool, jobList
 	}
 	_, err = stmt.Exec()
 	if err != nil && retryEach {
+		bugsnag.Notify(err)
 		txn.Rollback() // rollback started txn, to prevent dangling db connection
 		for _, job := range jobList {
 			errorMessage := jd.storeJobDS(ds, job)
@@ -757,6 +770,7 @@ func (jd *HandleT) getUnprocessedJobsDS(ds dataSetT, customValFilters []string,
 		err := rows.Scan(&job.JobID, &job.UUID, &job.Parameters, &job.CustomVal,
 			&job.EventPayload, &job.CreatedAt, &job.ExpireAt)
 		if err != nil {
+			bugsnag.Notify(err)
 			return nil, err
 		}
 		jobList = append(jobList, &job)
@@ -942,7 +956,7 @@ func (jd *HandleT) clearProcessedJobs() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <- ticker.C:
+		case <-ticker.C:
 			ds := jd.getDSList(true)
 			dsLastIndex := len(ds) - 1
 			lastDS := ds[dsLastIndex]
@@ -991,11 +1005,12 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 
 	unProcessedJobStatus := jd.getJobStatusDS(ds, unProcessedJobIds, []string{})
 	if err != nil {
+		bugsnag.Notify(err)
 		logger.Error(fmt.Sprintf("Failed to get job status from %v. Error: %s", ds, err))
 		return
 	}
 
-	migrateToDS := jd.addNewDS(false, dataSetT{}, maxJobID + 1)
+	migrateToDS := jd.addNewDS(false, dataSetT{}, maxJobID+1)
 	_, success := jd.storeJobsDS(migrateToDS, true, false, unProcessedJobs)
 	err = jd.updateJobStatusDS(migrateToDS, unProcessedJobStatus, []string{})
 

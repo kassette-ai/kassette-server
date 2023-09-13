@@ -5,7 +5,6 @@ database:
   port: 5432
   ssl_mode: disable
   user: kassette_user
-logLevel: INFO
 jobdb:
   maxDSJobs: 10
   maxRetryNumber: 10
@@ -33,3 +32,7 @@ router:
   updateStatusBatchSize: 10
   useTestSink: false
 serverPort: 8088
+
+bugsnag:
+  apiKey: bb2037623e9652894babeec20b4e57e4
+  stage: alpha

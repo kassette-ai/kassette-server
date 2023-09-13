@@ -1,41 +1,42 @@
 package processor
 
 import (
-	"fmt"
-	"sort"
-	"sync"
-	"strconv"
 	"encoding/json"
-	"kassette.ai/kassette-server/utils/logger"
+	"fmt"
+	"github.com/bugsnag/bugsnag-go"
 	"kassette.ai/kassette-server/integrations"
 	"kassette.ai/kassette-server/sources"
+	"kassette.ai/kassette-server/utils/logger"
+	"sort"
+	"strconv"
+	"sync"
 )
 
 var (
 	TransType = map[string]string{
-		"FIELDMAP": "field_map",
-		"FIELDHIDING": "field_hide",
+		"FIELDMAP":      "field_map",
+		"FIELDHIDING":   "field_hide",
 		"FIELDDELETING": "field_delete",
 	}
 	SystemTransformationRules = []TransformationRuleT{
 		{
 			Field: "anonymousId",
-			Type: TransType["FIELDHIDING"],
+			Type:  TransType["FIELDHIDING"],
 		},
 	}
-)	
+)
 
 type TransformationRuleT struct {
-	From		string		`json:"from"`
-	To			string		`json:"to"`
-	Field		string		`json:"field"`
-	Type		string		`json:"type"`
-	Value		string		`json:"value"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Field string `json:"field"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 type ResponseT struct {
-	Events       []interface{}
-	Success      bool
+	Events  []interface{}
+	Success bool
 }
 
 type transformerHandleT struct {
@@ -45,17 +46,17 @@ type transformerHandleT struct {
 }
 
 type transformMessageT struct {
-	index 					int
-	data  					interface{}
-	rules  					[]TransformationRuleT
-	destSchema				integrations.SchemaT
-	destConverter			integrations.TransformerHandleI
-	typeMapToDest			map[string]string
-	destSkipWithNoSchema	bool
-	srcSchema				integrations.SchemaT
-	srcConverter			sources.TransformerHandleI
-	typeMapToSrc			map[string]string
-	srcSkipWithNoSchema		bool
+	index                int
+	data                 interface{}
+	rules                []TransformationRuleT
+	destSchema           integrations.SchemaT
+	destConverter        integrations.TransformerHandleI
+	typeMapToDest        map[string]string
+	destSkipWithNoSchema bool
+	srcSchema            integrations.SchemaT
+	srcConverter         sources.TransformerHandleI
+	typeMapToSrc         map[string]string
+	srcSkipWithNoSchema  bool
 }
 
 func (trans *transformerHandleT) transformWorker() {
@@ -106,7 +107,7 @@ func transformBatchPayload(m []interface{}, rules []TransformationRuleT, destCon
 							convertV, sourceConvSuccess = srcConverter.Convert(v, srcType)
 						} else {
 							convertV = nil
-							sourceConvSuccess = false	
+							sourceConvSuccess = false
 						}
 					} else {
 						convertV = nil
@@ -200,23 +201,25 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	var rules []TransformationRuleT
 	var srcConfigMap map[string]interface{}
 	var destConfigMap map[string]interface{}
-	
+
 	err := json.Unmarshal([]byte(ruleStr), &rules)
 	if err != nil {
+		bugsnag.Notify(fmt.Errorf("Error while unmarshaling transformation rules: %s", err.Error()))
 		logger.Debug(fmt.Sprintf("Error while unmarshaling transformation rules: %s", err.Error()))
 		return ResponseT{
-			Events:       []interface{}{},
-			Success:      false,
+			Events:  []interface{}{},
+			Success: false,
 		}
 	}
 	rules = append(rules, SystemTransformationRules...)
 
 	err = json.Unmarshal([]byte(srcConfig), &srcConfigMap)
 	if err != nil {
+		bugsnag.Notify(fmt.Errorf("Error while getting schema for transformation [%s]. Error: %s", srcConfig, err.Error()))
 		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcConfig, err.Error()))
 		return ResponseT{
-			Events: 		[]interface{}{},
-			Success: 		false,
+			Events:  []interface{}{},
+			Success: false,
 		}
 	}
 	srcSchema := integrations.SchemaT{}
@@ -224,10 +227,11 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	if ok {
 		err = json.Unmarshal([]byte(srcSchemaStr), &srcSchema)
 		if err != nil {
+			bugsnag.Notify(fmt.Errorf("Error while getting schema for transformation [%s]. Error: %s", srcSchemaStr, err.Error()))
 			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", srcSchemaStr, err.Error()))
-			return ResponseT {
-				Events:			[]interface{}{},
-				Success:		false,
+			return ResponseT{
+				Events:  []interface{}{},
+				Success: false,
 			}
 		}
 	}
@@ -236,8 +240,8 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", destConfig, err.Error()))
 		return ResponseT{
-			Events: 		[]interface{}{},
-			Success: 		false,
+			Events:  []interface{}{},
+			Success: false,
 		}
 	}
 	destSchema := integrations.SchemaT{}
@@ -246,9 +250,9 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 		err = json.Unmarshal([]byte(destSchemaStr), &destSchema)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error while getting schema for transformation [%s]. Error: %s", destSchemaStr, err.Error()))
-			return ResponseT {
-				Events:			[]interface{}{},
-				Success:		false,
+			return ResponseT{
+				Events:  []interface{}{},
+				Success: false,
 			}
 		}
 	}
@@ -324,8 +328,8 @@ func (trans *transformerHandleT) Transform(clientEvents []interface{}, ruleStr s
 	}
 
 	return ResponseT{
-		Events:       outClientEvents,
-		Success:      true,
+		Events:  outClientEvents,
+		Success: true,
 	}
 }
 
