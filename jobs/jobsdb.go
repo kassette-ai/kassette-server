@@ -161,6 +161,7 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 
 	jd.tablePrefix = tablePrefix
 	jd.softDeletion = softDeletion
+	jd.maxRetryNumber = viper.GetInt("jobdb.maxRetryNumber")
 	//jd.dsRetentionPeriod = retentionPeriod
 	//jd.toBackup = toBackup
 	//jd.dsEmptyResultCache = map[dataSetT]map[string]map[string]bool{}
@@ -191,7 +192,6 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	// this jobsDB is determined to be cleaned up regularly.
 	if jd.softDeletion {
 		jd.maxDSJobs = viper.GetInt("jobdb.maxDSJobs")
-		jd.maxRetryNumber = viper.GetInt("jobdb.maxRetryNumber")
 		go jd.clearProcessedJobs()
 	}
 }
@@ -461,10 +461,11 @@ func (jd *HandleT) getNumberOfTotalJobs(ds dataSetT) (int, error) {
 	return count, nil
 }
 
-func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []string,
+func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll bool, stateFilters []string,
 	customValFilters []string, limitCount int, sourceIDFilters ...string) ([]*JobT, error) {
 
 	var stateQuery, customValQuery, limitQuery, sourceQuery string
+	var maxRetryNumber = jd.maxRetryNumber
 
 	if len(stateFilters) > 0 {
 		stateQuery = " AND " + jd.constructQuery("job_state", stateFilters, "OR")
@@ -495,6 +496,10 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []s
 		limitQuery = ""
 	}
 
+	if forMigration {
+		maxRetryNumber = 100000
+	}
+
 	var rows *sql.Rows
 	if getAll {
 		sqlStatement := fmt.Sprintf(`SELECT
@@ -510,7 +515,7 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []s
                                     (SELECT MAX(id) from %[2]s GROUP BY job_id) %[3]s)
                                   AS job_latest_state
                                    WHERE %[1]s.job_id=job_latest_state.job_id AND job_latest_state.attempt < %[4]d`,
-			ds.JobTable, ds.JobStatusTable, stateQuery, jd.maxRetryNumber)
+			ds.JobTable, ds.JobStatusTable, stateQuery, maxRetryNumber)
 		var err error
 
 		rows, err = jd.dbHandle.Query(sqlStatement)
@@ -535,7 +540,7 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, getAll bool, stateFilters []s
                                             WHERE %[1]s.job_id=job_latest_state.job_id
                                              %[4]s %[5]s
                                              AND job_latest_state.retry_time < $1 AND job_latest_state.attempt < %[7]d ORDER BY %[1]s.job_id %[6]s`,
-			ds.JobTable, ds.JobStatusTable, stateQuery, customValQuery, sourceQuery, limitQuery, jd.maxRetryNumber)
+			ds.JobTable, ds.JobStatusTable, stateQuery, customValQuery, sourceQuery, limitQuery, maxRetryNumber)
 		// fmt.Println(sqlStatement)
 
 		stmt, err := jd.dbHandle.Prepare(sqlStatement)
@@ -588,7 +593,7 @@ func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string,
 	}
 
 	for _, ds := range dsList {
-		jobs, err := jd.getProcessedJobsDS(ds, false, stateFilter, customValFilters, count, sourceIDFilters...)
+		jobs, err := jd.getProcessedJobsDS(ds, false, false, stateFilter, customValFilters, count, sourceIDFilters...)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error getting processed jobs from ds: %s", ds.JobTable))
 			continue
@@ -968,7 +973,7 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 		return
 	}
 
-	unProcessedJobs, err := jd.getProcessedJobsDS(ds, true, unProcssedStateFilter, []string{}, 0, "")
+	unProcessedJobs, err := jd.getProcessedJobsDS(ds, true, true, unProcssedStateFilter, []string{}, 0, "")
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to get unprocessed jobs from %v. Error: %s", ds, err))
 		return
