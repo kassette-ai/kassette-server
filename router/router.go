@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/bugsnag/bugsnag-go"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
+	"kassette.ai/kassette-server/integrations"
 	"kassette.ai/kassette-server/integrations/anaplan"
 	"kassette.ai/kassette-server/integrations/postgres"
 	"kassette.ai/kassette-server/integrations/powerbi"
-	"kassette.ai/kassette-server/integrations/anaplan"
-	"kassette.ai/kassette-server/integrations"
-	"kassette.ai/kassette-server/utils/logger"
+	jobsdb "kassette.ai/kassette-server/jobs"
+	stats "kassette.ai/kassette-server/services"
 	"kassette.ai/kassette-server/utils"
-	"github.com/tidwall/gjson"
-	"github.com/google/uuid"
-
+	"kassette.ai/kassette-server/utils/logger"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
 )
 
 var (
@@ -66,19 +69,19 @@ type DestinationRouterT struct {
 	Enabled    bool        `json:"Enabled"`
 }
 
-type JobProcessRequestT struct{
-	JobID					int64								`json:"JobID"`
-	AttemptNum				int									`json:"AttemptNum"`
-	DestinationID			int									`json:"DestinationID"`
-	EventPayload			json.RawMessage						`json:"EventPayload"`
+type JobProcessRequestT struct {
+	JobID         int64           `json:"JobID"`
+	AttemptNum    int             `json:"AttemptNum"`
+	DestinationID int             `json:"DestinationID"`
+	EventPayload  json.RawMessage `json:"EventPayload"`
 }
 
-type JobProcessResponseT struct{
-	JobID			int64					`json:"JobID"`
-	AttemptNum		int						`json:"AttemptNum"`
-	State			string					`json:"State"`
-	ErrorCode		string					`json:"ErrorCode"`
-	ErrorResponse	json.RawMessage			`json:"ErrorResponse"`
+type JobProcessResponseT struct {
+	JobID         int64           `json:"JobID"`
+	AttemptNum    int             `json:"AttemptNum"`
+	State         string          `json:"State"`
+	ErrorCode     string          `json:"ErrorCode"`
+	ErrorResponse json.RawMessage `json:"ErrorResponse"`
 }
 
 type HandleT struct {
@@ -213,7 +216,7 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {
 
-					bugsnag.Notify(fmt.Errorf("Error occurred while sending payload to destination. Error: %s", string(errorResponse)))
+					bugsnag.Notify(fmt.Errorf("Error occurred while sending payload to destination. Error: %s", errMsg))
 
 					errMsgMap["error"] = errMsg
 
@@ -221,7 +224,7 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				} else {
 					errMsgMap["success"] = "OK"
 					state = jobsdb.SucceededState
-					if len(failedJobs) > 0 { 
+					if len(failedJobs) > 0 {
 						router.CreateNewJobWithFailedEvents(failedJobs, destID)
 					}
 				}
@@ -229,12 +232,11 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 			errMsgMapStr, _ := json.Marshal(errMsgMap)
 			router.JobProcessResponseQ <- &JobProcessResponseT{
 
-				JobID: jobRequest.JobID,
-				AttemptNum: jobRequest.AttemptNum + 1,
-				State: state,
-				ErrorCode: errorCode,
+				JobID:         jobRequest.JobID,
+				AttemptNum:    jobRequest.AttemptNum + 1,
+				State:         state,
+				ErrorCode:     errorCode,
 				ErrorResponse: []byte(errMsgMapStr),
-
 			}
 			destinationBatchMutexMap[destID].Unlock()
 		}
@@ -287,23 +289,21 @@ func (router *HandleT) ProcessBatchRouterJobs() {
 
 						if succeeded {
 							router.JobProcessResponseQ <- &JobProcessResponseT{
-								JobID: jobProcess.JobID,
-								AttemptNum: jobProcess.AttemptNum + 1,
-								State: jobsdb.SucceededState,
-								ErrorCode: "200",
+								JobID:         jobProcess.JobID,
+								AttemptNum:    jobProcess.AttemptNum + 1,
+								State:         jobsdb.SucceededState,
+								ErrorCode:     "200",
 								ErrorResponse: []byte(errMsgMapStr),
-
 							}
 						} else {
 							router.destFailure.Increment(strconv.Itoa(jobProcess.DestinationID), 1)
 							router.JobProcessResponseQ <- &JobProcessResponseT{
 
-								JobID: jobProcess.JobID,
-								AttemptNum: jobProcess.AttemptNum + 1,
-								State: jobsdb.FailedState,
-								ErrorCode: "500",
+								JobID:         jobProcess.JobID,
+								AttemptNum:    jobProcess.AttemptNum + 1,
+								State:         jobsdb.FailedState,
+								ErrorCode:     "500",
 								ErrorResponse: []byte(errMsgMapStr),
-
 							}
 						}
 					}
@@ -372,7 +372,7 @@ func (router *HandleT) JobsRequestWorker() {
 			statusList = append(statusList, &newStatus)
 			destinationID := int(gjson.Get(string(batchEvent.Parameters), "destination_id").Int())
 			router.JobProcessRequestQ <- &JobProcessRequestT{
-				JobID: batchEvent.JobID,
+				JobID:      batchEvent.JobID,
 				AttemptNum: batchEvent.LastJobStatus.AttemptNum,
 
 				DestinationID: destinationID,
