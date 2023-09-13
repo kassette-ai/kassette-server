@@ -311,9 +311,11 @@ func (gateway *HandleT) startWebHandler() {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		}
 
-		writeKeyPayload.CustomerName = source.CustomerName
-		writeKeyPayload.SecretKey = source.SecretKey
-		source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)
+		if source.CustomerName != "" && source.SecretKey != "" {
+			writeKeyPayload.CustomerName = source.CustomerName
+			writeKeyPayload.SecretKey = source.SecretKey
+			source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)	
+		}
 
 		success := gateway.configDB.UpdateSource(source)
 		c.JSON(http.StatusOK, gin.H{"success": success})
