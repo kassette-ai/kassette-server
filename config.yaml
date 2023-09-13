@@ -1,11 +1,10 @@
 database:
-  host: localhost
+  host: kassette-server-postgresql-hl
   name: kassette
   password: password
   port: 5432
   ssl_mode: disable
   user: kassette_user
-logLevel: INFO
 jobdb:
   maxDSJobs: 10
   maxRetryNumber: 10
