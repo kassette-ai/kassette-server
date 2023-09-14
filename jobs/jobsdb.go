@@ -100,7 +100,6 @@ type HandleT struct {
 	maxDSJobs		   int
 	maxRetryNumber	   int
 	backgroundCancel   context.CancelFunc
-	dsListLock         sync.RWMutex
 	dsMigrationLock    sync.RWMutex
 
 	maxBackupRetryTime time.Duration
@@ -137,14 +136,6 @@ type dataSetRangeT struct {
 	startTime int64
 	endTime   int64
 	ds        dataSetT
-}
-
-/*
-GetWaiting returns events which are under processing
-This is a wrapper over GetProcessed call above
-*/
-func (jd *HandleT) GetWaiting(customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
-	return jd.GetProcessed([]string{WaitingState}, customValFilters, count, sourceIDFilters...)
 }
 
 /*
@@ -299,7 +290,7 @@ func (jd *HandleT) getAllTableNames() []string {
 
 	defer stmt.Close()
 
-	rows, _ := stmt.Query()
+	rows, _ := stmt.Query()	
 	defer rows.Close()
 
 	tableNames := []string{}
@@ -448,7 +439,11 @@ func (jd *HandleT) GetToRetry(customValFilters []string, count int, sourceIDFilt
 	return jd.GetProcessed([]string{FailedState}, customValFilters, count, sourceIDFilters...)
 }
 
-func (jd *HandleT) getNumberOfTotalJobs(ds dataSetT) (int, error) {
+func (jd *HandleT) getNumberOfTotalJobs(ds dataSetT, migrationCheck bool) (int, error) {
+	if migrationCheck {
+		jd.dsMigrationLock.RLock()
+		defer jd.dsMigrationLock.RUnlock()
+	}
 	var countQuery = fmt.Sprintf("SELECT count(*) from %s", ds.JobTable)
 	var count int
 	rows, err := jd.dbHandle.Query(countQuery)
@@ -592,8 +587,8 @@ one thread, update the state (to "waiting") in the same thread and pass on the t
 */
 func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string, count int, sourceIDFilters ...string) []*JobT {
 
-	jd.dsListLock.RLock()
-	defer jd.dsListLock.RUnlock()
+	jd.dsMigrationLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
 
 	dsList := jd.getDSList(true)
 	outJobs := make([]*JobT, 0)
@@ -626,10 +621,6 @@ func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceID
 	//The order of lock is very important. The mainCheckLoop
 	//takes lock in this order so reversing this will cause
 	//deadlocks
-	jd.dsMigrationLock.RLock()
-	jd.dsListLock.RLock()
-	defer jd.dsMigrationLock.RUnlock()
-	defer jd.dsListLock.RUnlock()
 
 	dsList := jd.getDSList(true)
 	outJobs := make([]*JobT, 0)
@@ -661,6 +652,9 @@ func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceID
 Store call is used to create new Jobs
 */
 func (jd *HandleT) Store(jobList []*JobT) (map[uuid.UUID]string, bool) {
+
+	jd.dsMigrationLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
 
 	dsList := jd.getDSList(true)
 	return jd.storeJobsDS(dsList[len(dsList)-1], false, true, jobList)
@@ -825,6 +819,9 @@ func (jd *HandleT) getJobStatusDS(ds dataSetT, jobIDFilters []string, customValF
 
 func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []string) {
 
+	jd.dsMigrationLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
+
 	if len(statusList) == 0 {
 		return
 	}
@@ -837,10 +834,6 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 	//The order of lock is very important. The mainCheckLoop
 	//takes lock in this order so reversing this will cause
 	//deadlocks
-	jd.dsMigrationLock.RLock()
-	jd.dsListLock.RLock()
-	defer jd.dsMigrationLock.RUnlock()
-	defer jd.dsListLock.RUnlock()
 
 	//We scan through the list of jobs and map them to DS
 	var lastPos int
@@ -968,9 +961,7 @@ func (jd *HandleT) clearProcessedJobs() {
 func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 
 	jd.dsMigrationLock.Lock()
-	jd.dsListLock.Lock()
 	defer jd.dsMigrationLock.Unlock()
-	defer jd.dsListLock.Unlock()
 
 	unProcssedStateFilter := []string{
 		FailedState,
@@ -980,7 +971,7 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 		WaitingRetryState,
 	}
 
-	totalJobs, err := jd.getNumberOfTotalJobs(ds)
+	totalJobs, err := jd.getNumberOfTotalJobs(ds, false)
 	logger.Info(fmt.Sprintf("Number of Total Jobs: %d", totalJobs))
 	if totalJobs < jd.maxDSJobs {
 		logger.Info("The number of total jobs has not reached to the maximum limit yet.")
