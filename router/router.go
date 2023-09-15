@@ -216,7 +216,7 @@ func (router *HandleT) ProcessRouterJobs(index int) {
 				errorCode = strconv.Itoa(statusCodeInt)
 				if statusCodeInt != 200 && statusCodeInt != 202 {
 
-					bugsnag.Notify(fmt.Errorf("Error occurred while sending payload to destination. Error: %s", errMsg))
+					bugsnag.Notify(fmt.Errorf("Destination %s. Error: %s", destinationDetailMap[jobRequest.DestinationID].Destination.Name, errMsg))
 
 					errMsgMap["error"] = errMsg
 
