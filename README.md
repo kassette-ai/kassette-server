@@ -1,8 +1,14 @@
 ## Kassette is product data platform built for engineers and data professionals
 
+### What is Kassette?
+
 Kassette provides data pipelines that make it easy to collect data from every application, website and Saas, then activate it in your warehouse and business tools.
 
-With Kassette, you can build product data pipelines that connect your whole data stack and then make them smarter by triggering enrichment and transformations based on analysis in your data warehouse. It's easy-to-use SDKs and event source integrations, Cloud Extract integrations, transformations, data extraction tools and expansive library of destination and warehouse integrations makes building customer data pipelines for both event streaming and cloud-to-warehouse ELT simple.
+### Why Kassette?
+Microservices and enterprise applications are difficult to integrate together. Data needs to be transformed, API integrations written, recovery implemented to handle failures. Development teams spend a long time implementing non core functionality. Allowing business to bring new processes and tools forces significant time developing integrations.
+
+### Bringing in the iPaas
+"Integration platform as a service" enable a new suite of tools to be built on top of the data pipeline. Kassette is a data pipeline that enables you to build your own integrations and data flows.
 
 ## Getting Started
 
