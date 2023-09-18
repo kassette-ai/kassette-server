@@ -807,6 +807,8 @@ func (jd *HandleT) getJobStatusDS(ds dataSetT, jobIDFilters []string, customValF
 	sql := "SELECT job_id, job_state, attempt, exec_time, retry_time, error_code, error_response FROM " + ds.JobStatusTable
 	if len(jobIDFilters) > 0 {
 		sql += " where job_id in ('" + strings.Join(jobIDFilters, "', '") + "')"
+	} else {
+		return jobStatusSlice
 	}
 	rows, _ := jd.dbHandle.Query(sql)
 	for rows.Next() {
