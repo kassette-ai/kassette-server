@@ -6,13 +6,11 @@ import (
 	"time"
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"github.com/google/uuid"
-	"io"
-	"kassette.ai/kassette-server/integrations"
-	"kassette.ai/kassette-server/utils/logger"
 	"net/http"
 	"net/url"
+	"github.com/google/uuid"
+	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/utils/logger"
 )
 
 var (
