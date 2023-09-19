@@ -6,38 +6,41 @@ import (
 	"time"
 	"bytes"
 	"encoding/json"
-	"net/url"
-	"net/http"
-	"kassette.ai/kassette-server/utils/logger"
+	"fmt"
+	"github.com/google/uuid"
+	"io"
 	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/utils/logger"
+	"net/http"
+	"net/url"
 )
 
 var (
 	TypeMapKassetteToDest = map[string]string{
-		"NUMBER":   	 	"number",
-		"BOOLEAN":   		"bool",
-		"TEXT": 	 		"string",
-		"DATE":				"date",
+		"NUMBER":  "number",
+		"BOOLEAN": "bool",
+		"TEXT":    "string",
+		"DATE":    "date",
 	}
 	tokenRefreshInterval = 20
 )
 
 type MetaT struct {
-	ValidationUrl			string			`json:"validationUrl"`
+	ValidationUrl string `json:"validationUrl"`
 }
 
 type TokenInfoT struct {
-	ExpiresAt				int64			`json:"expiresAt"`
-	TokenID					string			`json:"tokenId"`
-	TokenValue				string			`json:"tokenValue"`
-	RefreshTokenId			string			`json:"refreshTokenId"`
+	ExpiresAt      int64  `json:"expiresAt"`
+	TokenID        string `json:"tokenId"`
+	TokenValue     string `json:"tokenValue"`
+	RefreshTokenId string `json:"refreshTokenId"`
 }
 
 type AuthInfoT struct {
-	Meta				MetaT				`json:"meta"`
-	Status				string				`json:"status"`
-	StatusMessage		string				`json:"statusMessage"`
-	TokenInfo			TokenInfoT			`json:"tokenInfo"`
+	Meta          MetaT      `json:"meta"`
+	Status        string     `json:"status"`
+	StatusMessage string     `json:"statusMessage"`
+	TokenInfo     TokenInfoT `json:"tokenInfo"`
 }
 
 type HandleT struct {
@@ -54,16 +57,16 @@ type HandleT struct {
 }
 
 type FailureResponseT struct {
-	RequestIndex			int					`json:"requestIndex"`
-	FailureType				string				`json:"failureType"`
-	FailureMessageDetails	string				`json:"failureMessageDetails"`
+	RequestIndex          int    `json:"requestIndex"`
+	FailureType           string `json:"failureType"`
+	FailureMessageDetails string `json:"failureMessageDetails"`
 }
 
 type ResponseT struct {
-	Added			int					`json:"added"`
-	Ignored			int					`json:"ignored"`
-	Total			int					`json:"total"`
-	Failures		[]FailureResponseT	`json:"failures"`
+	Added    int                `json:"added"`
+	Ignored  int                `json:"ignored"`
+	Total    int                `json:"total"`
+	Failures []FailureResponseT `json:"failures"`
 }
 
 func (handle *HandleT) getFullUrl() string {
@@ -176,13 +179,13 @@ func (handle *HandleT) Init(config string) bool {
 		return false
 	}
 	handle.Method = method.(string)
-	
+
 	query, exist := configMap["query"]
 	if !exist {
 		logger.Error("Query field does not exist in the config data.")
 		return false
 	}
-	
+
 	var queryMap map[string]string
 	err = json.Unmarshal([]byte(query.(string)), &queryMap)
 	if err != nil {
@@ -231,10 +234,10 @@ func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface
 	for _, batchPayload := range BatchPayloadMapList {
 		for _, singleEvent := range batchPayload.Payload {
 			anaPlanPayload := map[string]interface{}{}
-			anaPlanPayload["code"] = fmt.Sprintf("%v-%v", config["JobID"], idx)
+			anaPlanPayload["code"], _ = uuid.NewUUID()
 			anaPlanPayload["properties"] = singleEvent
 			payloads = append(payloads, anaPlanPayload)
-			idx ++
+			idx++
 		}
 	}
 	itemsPayload := map[string]interface{}{"items": payloads}
@@ -245,12 +248,12 @@ func (handle *HandleT) Send(payload json.RawMessage, config map[string]interface
 	if err != nil {
 		return 500, err.Error(), failedJobs
 	}
-	
+
 	for k, v := range handle.Header {
 		req.Header.Add(k, v)
 	}
 
-	req.Header.Add("Authorization", "Bearer " + handle.AuthInfo.TokenInfo.TokenValue)
+	req.Header.Add("Authorization", "Bearer "+handle.AuthInfo.TokenInfo.TokenValue)
 
 	resp, err := handle.Client.Do(req)
 	if err != nil {

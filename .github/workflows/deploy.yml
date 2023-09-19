@@ -24,5 +24,4 @@ jobs:
     - name: add metaops helm repo
       run: helm repo add metaops https://metaops-solutions.github.io/helm-charts
     - name: install release
-      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server --set image.tag=$DOCKER_TAG,ingress.enable=true,ingress.hosts[0]=kassette-server.sandbox.metaops.solutions,ingress.gateways[0]=istio-system/my-ingress
-
+      run: helm upgrade -i --wait --timeout 5m -n kassette-dev kassette-server metaops/kassette-server --set image.tag=$DOCKER_TAG,ingress.enable=true,ingress.hosts[0]=kassette-server.sandbox.metaops.solutions,ingress.gateways[0]=istio-system/my-ingress,config.bugsnag.apiKey=bb2037623e9652894babeec20b4e57e4,config.bugsnag.stage=alpha,config.jobdb.maxRetryNumber=10

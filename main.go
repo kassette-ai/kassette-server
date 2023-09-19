@@ -1,15 +1,16 @@
 package main
 
 import (
-	"log"
-	"time"
+	"github.com/bugsnag/bugsnag-go"
+	"github.com/spf13/viper"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/gateway"
 	jobsdb "kassette.ai/kassette-server/jobs"
 	"kassette.ai/kassette-server/processor"
 	"kassette.ai/kassette-server/router"
 	"kassette.ai/kassette-server/utils/logger"
-	"github.com/spf13/viper"
+	"log"
+	"time"
 )
 
 var (
@@ -40,6 +41,17 @@ func main() {
 	}
 
 	logger.Info("Starting Kassette Server")
+	bugsnag.Configure(bugsnag.Configuration{
+		// Your BugSnag project API key, required unless set as environment
+		// variable $BUGSNAG_API_KEY
+		APIKey: viper.GetString("bugsnag.apiKey"),
+		// The development stage of your application build, like "alpha" or
+		// "production"
+		ReleaseStage: viper.GetString("bugsnag.stage"),
+		// The import paths for the Go packages containing your source files
+		ProjectPackages: []string{"main", "kassette.ai/kassette-server"},
+		// more configuration options
+	})
 
 	var gatewayDB jobsdb.HandleT
 	var routerDB jobsdb.HandleT
@@ -50,6 +62,7 @@ func main() {
 	var router router.HandleT
 
 	configDB.Init()
+
 	gatewayDB.Setup(false, "gw", 0, false, true)
 	routerDB.Setup(false, "rt", routerDBRetention, false, true)
 	batchRouterDB.Setup(false, "batch_rt", routerDBRetention, false, true)
