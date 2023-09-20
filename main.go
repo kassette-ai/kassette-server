@@ -69,5 +69,5 @@ func main() {
 
 	processor.Setup(&gatewayDB, &routerDB, &batchRouterDB)
 	router.Setup(&routerDB, &configDB)
-	gateway.Setup(&gatewayDB, &configDB)
+	gateway.Setup(&gatewayDB, &routerDB, &configDB)
 }
