@@ -47,6 +47,16 @@ type JobStatusT struct {
 	WorkspaceId   string          `json:"WorkspaceId"`
 }
 
+type JobHealthT struct {
+	SourceName			string				`json:"source_name"`
+	DestinationName		string				`json:"destination_name`
+	AttemptNum			int					`json:"attempt_num"`
+	DestinationConfig	json.RawMessage		`json:"destination_config"`
+	ErrorResponse		json.RawMessage		`json:"error_response"`
+	Payload				json.RawMessage		`json:"payload"`
+	ExecTime			time.Time			`json:"exec_time"`
+}
+
 // constants for JobStatusT JobState
 const (
 	SucceededState    = "succeeded"
@@ -520,6 +530,8 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll boo
 			ds.JobTable, ds.JobStatusTable, stateQuery, maxRetryNumber)
 		var err error
 
+		logger.Info(sqlStatement)
+
 		rows, err = jd.dbHandle.Query(sqlStatement)
 		if err != nil {
 			bugsnag.Notify(err)
@@ -801,6 +813,93 @@ UpdateJobStatus updates the status of a batch of jobs
 customValFilters[] is passed so we can efficiently mark empty cache
 Later we can move this to query
 */
+func (jd* HandleT) GetJobHealth() []JobHealthT {
+	jd.dsMigrationLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
+
+	dsList := jd.getDSList(true)
+	if len(dsList) == 0 {
+		return []JobHealthT{}
+	}
+	ds := dsList[len(dsList) - 1]
+
+	var stateQuery string
+	stateFilters := []string{FailedState}
+	if len(stateFilters) > 0 {
+		stateQuery = " WHERE " + jd.constructQuery("job_state", stateFilters, "OR")
+	} else {
+		stateQuery = ""
+	}
+
+	sqlStatement := fmt.Sprintf(`SELECT
+							%[1]s.job_id, %[1]s.uuid, %[1]s.parameters,  %[1]s.custom_val, %[1]s.event_payload,
+							%[1]s.created_at, %[1]s.expire_at,
+							job_latest_state.job_state, job_latest_state.attempt,
+							job_latest_state.exec_time, job_latest_state.retry_time,
+							job_latest_state.error_code, job_latest_state.error_response
+							FROM
+							%[1]s,
+							(SELECT job_id, job_state, attempt, exec_time, retry_time,
+							error_code, error_response FROM %[2]s %[3]s)
+							AS job_latest_state
+							WHERE %[1]s.job_id=job_latest_state.job_id ORDER BY job_latest_state.exec_time desc`,
+							ds.JobTable, ds.JobStatusTable, stateQuery)
+	logger.Info(sqlStatement)
+	rows, err := jd.dbHandle.Query(sqlStatement)
+	defer rows.Close()
+	if err != nil {
+		return []JobHealthT{}
+	}
+
+	var parameterConfig map[string]string
+	var jobHealthStatus JobHealthT
+	var failedJob JobT
+	jobHealthStatusSlice := []JobHealthT{}
+	for rows.Next() {
+
+		err := rows.Scan(&failedJob.JobID, &failedJob.UUID, &failedJob.Parameters, &failedJob.CustomVal,
+			&failedJob.EventPayload, &failedJob.CreatedAt, &failedJob.ExpireAt,
+			&failedJob.LastJobStatus.JobState, &failedJob.LastJobStatus.AttemptNum,
+			&failedJob.LastJobStatus.ExecTime, &failedJob.LastJobStatus.RetryTime,
+			&failedJob.LastJobStatus.ErrorCode, &failedJob.LastJobStatus.ErrorResponse)
+		
+		if err != nil {
+			continue
+		}
+
+		var sourceName string
+		var destinationName	string
+		var destinationConfig json.RawMessage
+		err = json.Unmarshal(failedJob.Parameters, &parameterConfig)
+		if err == nil {
+			sourceID, exist := parameterConfig["source_id"]
+			if exist {
+				rows, _ := jd.dbHandle.Query(fmt.Sprintf("SELECT name FROM source where id = %s", sourceID))
+				for rows.Next() {
+					rows.Scan(&sourceName)
+				}
+			}
+			destinationID, exist := parameterConfig["destination_id"]
+			if exist {
+				rows, _ := jd.dbHandle.Query(fmt.Sprintf("SELECT name FROM destination where id = %s", destinationID))
+				for rows.Next() {
+					rows.Scan(&destinationName)
+					rows.Scan(&destinationConfig)
+				}
+			}
+		}
+		jobHealthStatus.SourceName = sourceName
+		jobHealthStatus.DestinationName = destinationName
+		jobHealthStatus.DestinationConfig = destinationConfig
+		jobHealthStatus.AttemptNum = failedJob.LastJobStatus.AttemptNum
+		jobHealthStatus.ExecTime = failedJob.LastJobStatus.ExecTime
+		jobHealthStatus.ErrorResponse = failedJob.LastJobStatus.ErrorResponse
+		jobHealthStatus.Payload = failedJob.EventPayload
+		jobHealthStatusSlice = append(jobHealthStatusSlice, jobHealthStatus)
+	}
+	return jobHealthStatusSlice
+}
+
 func (jd *HandleT) getJobStatusDS(ds dataSetT, jobIDFilters []string, customValFilters []string) []*JobStatusT {
 	var jobStatus *JobStatusT
 	jobStatusSlice := []*JobStatusT{}

@@ -289,11 +289,12 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		//Need to replace UUID his with messageID from client
 		configSubscriberLock.RLock()
 		destination := connectionMap[connectionID].DestinationDetail.Destination
+		source := connectionMap[connectionID].SourceDetail.Source
 		configSubscriberLock.RUnlock()
 		id := uuid.New()
 		newJob := jobsdb.JobT{
 			UUID:         id,
-			Parameters:   []byte(fmt.Sprintf(`{"destination_id": "%v"}`, destination.ID)),
+			Parameters:   []byte(fmt.Sprintf(`{"destination_id": "%v", "source_id": "%v"}`, destination.ID, source.ID)),
 			CreatedAt:    time.Now(),
 			ExpireAt:     time.Now(),
 			CustomVal:    "",

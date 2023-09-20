@@ -101,6 +101,7 @@ type HandleT struct {
 	webRequestQ   chan *webRequestT
 	batchRequestQ chan *batchWebRequestT
 	jobsDB        *jobsdb.HandleT
+	routerJobsDB  *jobsdb.HandleT
 	configDB      *backendconfig.HandleT
 	ackCount      uint64
 	recvCount     uint64
@@ -181,12 +182,13 @@ func backendConfigSubscriber() {
 	}
 }
 
-func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, configDB *backendconfig.HandleT) {
+func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.HandleT, configDB *backendconfig.HandleT) {
 	loadConfig()
 	gateway.webRequestQ = make(chan *webRequestT)
 	gateway.batchRequestQ = make(chan *batchWebRequestT)
 
 	gateway.jobsDB = jobsDB
+	gateway.routerJobsDB = routerJobsDB
 	gateway.configDB = configDB
 
 	gateway.userWorkerBatchRequestQ = make(chan *userWorkerBatchRequestT, maxDBBatchSize)
@@ -473,6 +475,10 @@ func (gateway *HandleT) startWebHandler() {
 		} else if cataType == "source" {
 			c.JSON(http.StatusOK, sources.TypeMapKassetteToSrc)
 		}
+	})
+
+	r.GET("/router-job-status", func(c* gin.Context) {
+		c.JSON(http.StatusOK, gateway.routerJobsDB.GetJobHealth())
 	})
 
 	serverPort := viper.GetString("serverPort")
