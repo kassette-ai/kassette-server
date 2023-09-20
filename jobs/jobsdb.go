@@ -189,7 +189,10 @@ func (jd *HandleT) Setup(clearAll bool, tablePrefix string, retentionPeriod time
 	// this will be configurable in the future
 	if len(jd.datasetList) == 0 {
 		jd.addNewDS(true, dataSetT{}, 1)
+		jd.getDSList(true)
 	}
+
+	jd.clearExecutingJobStatus()
 
 	// If softDeletion flag is set to true,
 	// this jobsDB is determined to be cleaned up regularly.
@@ -207,6 +210,35 @@ func GetConnectionString() string {
 		viper.GetString("database.user"),
 		viper.GetString("database.password"),
 		viper.GetString("database.name"))
+}
+
+func (jd *HandleT) clearExecutingJobStatus() {
+	logger.Info("Start clearing executing jobs")
+	dsList := jd.getDSList(false)
+	if len(dsList) == 0 {
+		logger.Error("No DsList to clear the executing jobs.")
+		return
+	}
+	lastDS := dsList[len(dsList) - 1]
+	sqlStatement := fmt.Sprintf("SELECT id, job_state from %s where id in (SELECT MAX(id) from %s GROUP BY job_id)", lastDS.JobStatusTable, lastDS.JobStatusTable)
+	rows, err := jd.dbHandle.Query(sqlStatement)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while clearing executing jobs. %v", err.Error()))
+	}
+	executingJobStatusIDSlice := []string{}
+	for rows.Next() {
+		var jobStatusID string
+		var jobStatus string
+		rows.Scan(&jobStatusID, &jobStatus)
+		if jobStatus == ExecutingState {
+			executingJobStatusIDSlice = append(executingJobStatusIDSlice, jobStatusID)
+		}
+	}
+	sqlStatement = fmt.Sprintf("DELETE from %s where %s", lastDS.JobStatusTable, jd.constructQuery("id", executingJobStatusIDSlice, "OR"))
+	_, err = jd.dbHandle.Exec(sqlStatement)
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while clearing executing jobs. %v", err.Error()))
+	}
 }
 
 func (jd *HandleT) setupEnumTypes(psqlInfo string) {
@@ -342,7 +374,7 @@ func (jd *HandleT) addNewDS(appendLast bool, insertBeforeDS dataSetT, startSeque
 	var newDS dataSetT
 	var newDSIdx string
 
-	dsList := jd.getDSList(true)
+	dsList := jd.getDSList(false)
 	if len(dsList) == 0 {
 		newDSIdx = "1"
 	} else {
@@ -529,9 +561,6 @@ func (jd *HandleT) getProcessedJobsDS(ds dataSetT, forMigration bool, getAll boo
                                    WHERE %[1]s.job_id=job_latest_state.job_id AND job_latest_state.attempt < %[4]d`,
 			ds.JobTable, ds.JobStatusTable, stateQuery, maxRetryNumber)
 		var err error
-
-		logger.Info(sqlStatement)
-
 		rows, err = jd.dbHandle.Query(sqlStatement)
 		if err != nil {
 			bugsnag.Notify(err)
@@ -602,7 +631,7 @@ func (jd *HandleT) GetProcessed(stateFilter []string, customValFilters []string,
 	jd.dsMigrationLock.RLock()
 	defer jd.dsMigrationLock.RUnlock()
 
-	dsList := jd.getDSList(true)
+	dsList := jd.getDSList(false)
 	outJobs := make([]*JobT, 0)
 
 	if count == 0 {
@@ -634,7 +663,10 @@ func (jd *HandleT) GetUnprocessed(customValFilters []string, count int, sourceID
 	//takes lock in this order so reversing this will cause
 	//deadlocks
 
-	dsList := jd.getDSList(true)
+	jd.dsMigrationLock.RLock()
+	defer jd.dsMigrationLock.RUnlock()
+
+	dsList := jd.getDSList(false)
 	outJobs := make([]*JobT, 0)
 
 	if count == 0 {
@@ -668,7 +700,7 @@ func (jd *HandleT) Store(jobList []*JobT) (map[uuid.UUID]string, bool) {
 	jd.dsMigrationLock.RLock()
 	defer jd.dsMigrationLock.RUnlock()
 
-	dsList := jd.getDSList(true)
+	dsList := jd.getDSList(false)
 	return jd.storeJobsDS(dsList[len(dsList)-1], false, true, jobList)
 }
 
@@ -766,7 +798,11 @@ func (jd *HandleT) getUnprocessedJobsDS(ds dataSetT, customValFilters []string,
 		sqlStatement += fmt.Sprintf(" LIMIT %d", count)
 	}
 
-	rows, _ = jd.dbHandle.Query(sqlStatement)
+	rows, err := jd.dbHandle.Query(sqlStatement)
+	if err != nil {
+		logger.Info(sqlStatement)
+		logger.Error(fmt.Sprintf("HeyError: %v", err.Error()))
+	}
 
 	defer rows.Close()
 
@@ -817,7 +853,7 @@ func (jd* HandleT) GetJobHealth() []JobHealthT {
 	jd.dsMigrationLock.RLock()
 	defer jd.dsMigrationLock.RUnlock()
 
-	dsList := jd.getDSList(true)
+	dsList := jd.getDSList(false)
 	if len(dsList) == 0 {
 		return []JobHealthT{}
 	}
@@ -938,7 +974,7 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 
 	//We scan through the list of jobs and map them to DS
 	var lastPos int
-	dsRangeList := jd.getDSRangeList(false)
+	dsRangeList := jd.getDSRangeList(true)
 	for _, ds := range dsRangeList {
 		//minID := ds.minJobID
 		maxID := ds.maxJobID
@@ -980,7 +1016,7 @@ func (jd *HandleT) UpdateJobStatus(statusList []*JobStatusT, customValFilters []
 	//The last (most active DS) might not have range element as it is being written to
 	if lastPos < len(statusList) {
 		//Make sure the last range is missing
-		dsList := jd.getDSList(true)
+		dsList := jd.getDSList(false)
 		//Update status in the last element
 		err := jd.updateJobStatusDS(dsList[len(dsList)-1], statusList[lastPos:], customValFilters)
 		if err != nil {
@@ -1001,7 +1037,7 @@ func (jd *HandleT) getDSRangeList(refreshFromDB bool) []dataSetRangeT {
 	}
 
 	//At this point we must have write-locked dsListLock
-	dsList := jd.getDSList(true)
+	dsList := jd.getDSList(false)
 	jd.datasetRangeList = nil
 
 	for idx, ds := range dsList {
@@ -1051,7 +1087,7 @@ func (jd *HandleT) clearProcessedJobs() {
 	for {
 		select {
 		case <-ticker.C:
-			ds := jd.getDSList(true)
+			ds := jd.getDSList(false)
 			dsLastIndex := len(ds) - 1
 			lastDS := ds[dsLastIndex]
 			jd.clearProcessedJobsDS(lastDS)
@@ -1102,7 +1138,7 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 		return
 	}
 
-	migrateToDS := jd.addNewDS(false, dataSetT{}, maxJobID+1)
+	migrateToDS := jd.addNewDS(true, dataSetT{}, maxJobID+1)
 	_, success := jd.storeJobsDS(migrateToDS, true, false, unProcessedJobs)
 	err = jd.updateJobStatusDS(migrateToDS, unProcessedJobStatus, []string{})
 
@@ -1111,4 +1147,5 @@ func (jd *HandleT) clearProcessedJobsDS(ds dataSetT) {
 	} else {
 		jd.dropDS(ds)
 	}
+	jd.getDSList(true)
 }
