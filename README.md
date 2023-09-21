@@ -1,15 +1,14 @@
+&nbsp;
 <p align="center">
   <picture>
-    <source srcset="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="500px" media="(prefers-color-scheme: dark)">
+    <source srcset="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="380px" media="(prefers-color-scheme: dark)">
     <img src="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="500px">
   </picture>
 </p>
 
-## Kassette is product data platform built for engineers and data professionals
+&nbsp;
 
-### What is Kassette?
-
-Kassette provides data pipelines that make it easy to collect data from every application, website and Saas, then activate it in your warehouse and business tools.
+Kassette provides **secure** data pipelines that make it easy to collect data from every application and site, then activate it in your warehouse and business tools.
 
 ### Why Kassette?
 Microservices and enterprise applications are difficult to integrate together. Data needs to be transformed, API integrations written, recovery implemented to handle failures. Development teams spend a long time implementing non core functionality. Allowing business to bring new processes and tools forces significant time developing integrations.
