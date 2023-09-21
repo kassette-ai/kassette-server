@@ -1,5 +1,9 @@
-
-![kassette-github-logo](https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b)
+<p align="center">
+  <picture>
+    <source srcset="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="500px" media="(prefers-color-scheme: dark)">
+    <img src="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="500px">
+  </picture>
+</p>
 
 ## Kassette is product data platform built for engineers and data professionals
 
