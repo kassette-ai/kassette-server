@@ -1,3 +1,6 @@
+
+![kassette-github-logo](https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b)
+
 ## Kassette is product data platform built for engineers and data professionals
 
 ### What is Kassette?
