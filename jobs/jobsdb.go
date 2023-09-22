@@ -49,7 +49,7 @@ type JobStatusT struct {
 
 type JobHealthT struct {
 	SourceName			string				`json:"source_name"`
-	DestinationName		string				`json:"destination_name`
+	DestinationName		string				`json:"destination_name"`
 	AttemptNum			int					`json:"attempt_num"`
 	DestinationConfig	json.RawMessage		`json:"destination_config"`
 	ErrorResponse		json.RawMessage		`json:"error_response"`
@@ -917,10 +917,9 @@ func (jd* HandleT) GetJobHealth() []JobHealthT {
 			}
 			destinationID, exist := parameterConfig["destination_id"]
 			if exist {
-				rows, _ := jd.dbHandle.Query(fmt.Sprintf("SELECT name FROM destination where id = %s", destinationID))
+				rows, _ := jd.dbHandle.Query(fmt.Sprintf("SELECT name, config FROM destination where id = %s", destinationID))
 				for rows.Next() {
-					rows.Scan(&destinationName)
-					rows.Scan(&destinationConfig)
+					rows.Scan(&destinationName, &destinationConfig)
 				}
 			}
 		}
