@@ -123,6 +123,7 @@ func (handle *HandleT) refreshAuthToken() (bool, string) {
 				logger.Info("Anaplan Token Refresh Successful!")
 			} else {
 				logger.Error("Anaplan Token Refresh Failed!")
+				handle.authenticate(false)
 			}
 		}
 	}
