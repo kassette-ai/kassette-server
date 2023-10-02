@@ -1,0 +1,80 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:latest
+    restart: always
+    ports:
+      - 5432:5432  
+    environment:
+      POSTGRES_USER: kassette_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: kassette
+    volumes: 
+      - ./sql/static.sql:/docker-entrypoint-initdb.d/01_create_service_catalogue.sql
+      - ./sql/my_camunda2postgres.sql:/docker-entrypoint-initdb.d/02_create_example.sql
+      - ./sql/my_destination.sql:/docker-entrypoint-initdb.d/03_create_dest.sql
+      - ./sql/camunda-diy.sql:/docker-entrypoint-initdb.d/04_camunda-diy.sql
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U kassette_user -d workflow'"]
+      interval: 10s
+      timeout: 3s
+      retries: 3    
+
+  kassette-server:
+    image: metaops/kassette-server:v1.1.0
+    restart: always
+    ports:
+      - 8088:8088
+    volumes: 
+      - ./config/config.yaml:/opt/kassette-ai/config.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  kassette-transformer:
+    image: metaops/kassette-transformer:dev_v1.1.0
+    restart: always
+    ports:
+      - 3000:3000
+    depends_on:
+      kassette-server:
+        condition: service_started
+
+  camunda-diy:
+    image: metaops/camunda-diy:latest    
+    restart: always
+    environment:
+      DB_NAME: workflow
+      DB_PORT: 5432
+      DB_USER: camundadiy
+      DB_PASSWORD: camundadiy
+      DB_HOST: postgres
+    ports:
+      - 8090:8090
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: curl -f http://localhost:8090/camunda/app/welcome/default || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  camunda-poker:
+    image: metaops/camunda-diy-poker:latest
+    restart: always
+    depends_on:
+      camunda-diy:
+        condition: service_healthy
+    environment:
+      CAMUNDA_HOST: camunda-diy
+
+  kassette-camunda-agent:
+    image: metaops/kassette-camunda-agent:v1.1.0
+    restart: always
+    volumes: 
+      - ./config/camunda-config.yaml:/opt/kassette-ai/config.yaml
+    depends_on:
+      camunda-diy:
+        condition: service_healthy

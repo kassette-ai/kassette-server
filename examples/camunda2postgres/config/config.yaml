@@ -1,0 +1,34 @@
+database:
+  host: postgres
+  name: kassette
+  password: password
+  port: 5432
+  ssl_mode: disable
+  user: kassette_user
+jobdb:
+  maxDSJobs: 100
+  maxRetryNumber: 10
+gateway:
+  allowReqsWithoutUserIDAndAnonymousID: true
+  batchTimeoutInMS: 2000
+  maxBatchSize: 32
+  maxDBWriterProcess: 4
+  maxReqSizeInKB: 1000000
+  maxWebReqQSize: 1
+  webPort: 8080
+router:
+  jobQueryBatchSize: 10
+  keepOrderOnFailure: false
+  maxFailedCountForJob: 3
+  maxSleep: 100
+  maxStatusUpdateWait: 10
+  minSleep: 10
+  noOfJobsPerChannel: 10
+  noOfWorkers: 4
+  randomWorkerAssign: true
+  readSleep: 100
+  ser: 10
+  testSinkURL: http://localhost:8080/testSink
+  updateStatusBatchSize: 10
+  useTestSink: false
+serverPort: 8088
