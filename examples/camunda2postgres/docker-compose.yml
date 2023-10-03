@@ -58,8 +58,8 @@ services:
     healthcheck:
       test: curl -f http://localhost:8090/camunda/app/welcome/default || exit 1
       interval: 10s
-      timeout: 3s
-      retries: 10
+      timeout: 5s
+      retries: 20
 
   camunda-poker:
     image: metaops/camunda-diy-poker:latest
@@ -78,3 +78,12 @@ services:
     depends_on:
       camunda-diy:
         condition: service_healthy
+
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    restart: always
+    ports:
+      - 3001:3000
+    volumes: 
+      - ./grafana/:/var/lib/grafana
