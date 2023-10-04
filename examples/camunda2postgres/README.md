@@ -23,5 +23,5 @@ UI Admin interface allowing to configure kassette-server logic. Can be accessed 
 Kassette Camunda Agent which polls Camunda Database waiting for new historical events and submits them to the kassette-server.
 
 ## grafana
-Configured instance of grafana which will show simple graph analysing the Data captured from Camunda events
+Configured instance of grafana which will show simple graph analysing the Data captured from Camunda events. Can be accessed via http://localhost:3001
 
