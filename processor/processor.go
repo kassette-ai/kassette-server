@@ -18,6 +18,7 @@ import (
 	"kassette.ai/kassette-server/integrations/anaplan"
 	"kassette.ai/kassette-server/sources"
 	"kassette.ai/kassette-server/sources/camunda"
+	"kassette.ai/kassette-server/sources/postgres"
 	"log"
 	"sort"
 	"sync"
@@ -267,6 +268,10 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		case "Camunda":
 			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
 			srcConverter = &camunda.TransformerHandleT{}
+			srcSkipWithNoSchema = false
+                case "Postgres":
+			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
+			srcConverter = &srcpostgres.TransformerHandleT{}
 			srcSkipWithNoSchema = false
 		}
 
