@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source srcset="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="380px" media="(prefers-color-scheme: dark)">
-    <img src="https://github.com/kassette-ai/kassette-server/assets/200480/eae56a8b-7e19-4580-8a18-4f1cc28bdf1b" width="500px">
+    <source srcset="https://github.com/kassette-ai/kassette-server/assets/200480/5b0f148b-67ed-4a41-8555-a5c69d34fc66" width="380px" media="(prefers-color-scheme: dark)">
+    <img src="https://github.com/kassette-ai/kassette-server/assets/200480/5b0f148b-67ed-4a41-8555-a5c69d34fc66" width="500px">
   </picture>
 </p>
 
