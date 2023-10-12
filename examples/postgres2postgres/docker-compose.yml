@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:latest
+    restart: always
+    ports:
+      - 5432:5432  
+    environment:
+      POSTGRES_USER: kassette_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: kassette
+    volumes: 
+      - ./sql/static.sql:/docker-entrypoint-initdb.d/01_create_service_catalogue.sql
+      - ./sql/my_postgres2postgres.sql:/docker-entrypoint-initdb.d/02_create_example.sql
+      - ./sql/my_destination.sql:/docker-entrypoint-initdb.d/03_create_dest.sql
+    healthcheck:
+      test: ["CMD-SHELL", "sh -c 'pg_isready -U kassette_user -d workflow'"]
+      interval: 10s
+      timeout: 3s
+      retries: 3    
+
+  kassette-postgres-agent:
+    image: metaops/kassette-postgres-agent:v0.0.1
+    volumes:
+      - ./config/postgres-config.yaml:/opt/kassette-ai/config.yaml
+
+  kassette-server:
+    image: metaops/kassette-server:v1.1.1
+    restart: always
+    ports:
+      - 8088:8088
+    volumes: 
+      - ./config/config.yaml:/opt/kassette-ai/config.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  kassette-transformer:
+    image: metaops/kassette-transformer:dev_v1.1.0
+    restart: always
+    ports:
+      - 3000:3000
+    depends_on:
+      kassette-server:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    restart: always
+    ports:
+      - 3001:3000
+    volumes: 
+      - ./grafana/:/var/lib/grafana

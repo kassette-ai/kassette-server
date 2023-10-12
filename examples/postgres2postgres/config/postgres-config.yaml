@@ -1,0 +1,29 @@
+---
+database:
+  host: postgres
+  user: kassette_user
+  name: kassette
+  password: password
+  port: 5432
+  ssl_mode: disable
+  batchSize: 2
+kassette-server:
+  url: http://kassette-server:8088
+  batchSize: 3
+kassette-agent:
+  customerName: Postgres_Custome
+  secretKey: YCeRbUtIavHoZOrqn2E1697019268720
+#tables:
+#  service_catalogue:
+#    track_column: id
+#    id_column: id
+#  act_hi_actinst:
+#    track_column: start_time_
+#    id_column: id_
+#  act_hi_detail:
+#    track_column: time_
+#    id_column: id_  
+querries:
+  users:
+    sql: "select * from service_catalogue;"
+    schedule: "* * * * *"
