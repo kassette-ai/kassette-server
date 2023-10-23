@@ -1,12 +1,12 @@
 database:
-  host: kassette-server-postgresql-hl
+  host: postgres
   name: kassette
   password: password
   port: 5432
   ssl_mode: disable
   user: kassette_user
 jobdb:
-  maxDSJobs: 10
+  maxDSJobs: 100
   maxRetryNumber: 10
 gateway:
   allowReqsWithoutUserIDAndAnonymousID: true
@@ -32,7 +32,3 @@ router:
   updateStatusBatchSize: 10
   useTestSink: false
 serverPort: 8088
-
-bugsnag:
-  apiKey: bb2037623e9652894babeec20b4e57e4
-  stage: alpha
