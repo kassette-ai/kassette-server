@@ -5,9 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/bugsnag/bugsnag-go"
 	"io"
-	stats "kassette.ai/kassette-server/services"
 	"log"
 	"net/http"
 	"regexp"
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/bugsnag/bugsnag-go"
+	stats "kassette.ai/kassette-server/services"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -241,42 +242,42 @@ func (gateway *HandleT) startWebHandler() {
 			c.JSON(http.StatusOK, catalogue)
 		}
 	})
+	// Service Catalogue moved to yaml
+	// r.POST("/service-catalogue", func(c *gin.Context) {
 
-	r.POST("/service-catalogue", func(c *gin.Context) {
+	// 	var catalogue backendconfig.ServiceCatalogueT
+	// 	catalogue.Name = c.PostForm("name")
+	// 	catalogue.Type = c.PostForm("type")
+	// 	catalogue.Access = c.PostForm("access")
+	// 	catalogue.Category = c.PostForm("category")
+	// 	catalogue.Url = c.PostForm("url")
+	// 	catalogue.Notes = c.PostForm("notes")
+	// 	catalogue.MetaData = c.PostForm("metadata")
 
-		var catalogue backendconfig.ServiceCatalogueT
-		catalogue.Name = c.PostForm("name")
-		catalogue.Type = c.PostForm("type")
-		catalogue.Access = c.PostForm("access")
-		catalogue.Category = c.PostForm("category")
-		catalogue.Url = c.PostForm("url")
-		catalogue.Notes = c.PostForm("notes")
-		catalogue.MetaData = c.PostForm("metadata")
+	// 	file, err := c.FormFile("icon")
+	// 	if err != nil {
+	// 		c.JSON(http.StatusBadRequest, gin.H{"Error": "No Valid File"})
+	// 		return
+	// 	}
 
-		file, err := c.FormFile("icon")
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"Error": "No Valid File"})
-			return
-		}
+	// 	destIconPath, err := misc.UploadFile("static/icons/", file)
+	// 	if err != nil {
+	// 		c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
+	// 		return
+	// 	}
+	// 	catalogue.IconUrl = destIconPath
 
-		destIconPath, err := misc.UploadFile("static/icons/", file)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"Error": err.Error()})
-			return
-		}
-		catalogue.IconUrl = destIconPath
+	// 	success := gateway.configDB.CreateNewServiceCatalogue(catalogue)
+	// 	c.JSON(http.StatusOK, gin.H{"success": success})
+	// })
 
-		success := gateway.configDB.CreateNewServiceCatalogue(catalogue)
-		c.JSON(http.StatusOK, gin.H{"success": success})
-	})
-
-	r.DELETE("/service-catalogue/:id", func(c *gin.Context) {
-		service_id := c.Param("id")
-		success := gateway.configDB.DeleteServiceCatalogue(service_id)
-		c.JSON(http.StatusOK, gin.H{
-			"success": success,
-		})
-	})
+	// r.DELETE("/service-catalogue/:id", func(c *gin.Context) {
+	// 	service_id := c.Param("id")
+	// 	success := gateway.configDB.DeleteServiceCatalogue(service_id)
+	// 	c.JSON(http.StatusOK, gin.H{
+	// 		"success": success,
+	// 	})
+	// })
 
 	r.GET("/source", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gateway.configDB.GetAllSources())
@@ -326,7 +327,7 @@ func (gateway *HandleT) startWebHandler() {
 		if source.CustomerName != "" && source.SecretKey != "" {
 			writeKeyPayload.CustomerName = source.CustomerName
 			writeKeyPayload.SecretKey = source.SecretKey
-			source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)	
+			source.WriteKey = misc.GenerateWriteKey(writeKeyPayload)
 		}
 
 		success := gateway.configDB.UpdateSource(source)
@@ -477,7 +478,7 @@ func (gateway *HandleT) startWebHandler() {
 		}
 	})
 
-	r.GET("/router-job-status", func(c* gin.Context) {
+	r.GET("/router-job-status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gateway.routerJobsDB.GetJobHealth())
 	})
 

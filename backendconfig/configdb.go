@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"time"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 )
@@ -120,7 +122,7 @@ func (cd *HandleT) CreateSourceTable() {
 		`CREATE TABLE IF NOT EXISTS source (
 			id BIGSERIAL PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
-			service_id INT REFERENCES service_catalogue(id),
+			service_id INT,
 			write_key TEXT NOT NULL,
 			customer_id INT,
 			config JSONB NOT NULL,
@@ -141,7 +143,7 @@ func (cd *HandleT) CreateDestinationTable() {
 		`CREATE TABLE IF NOT EXISTS destination (
 			id BIGSERIAL PRIMARY KEY,
 			name VARCHAR(255) NOT NULL,
-			service_id INT REFERENCES service_catalogue(id),
+			service_id INT,
 			customer_id INT,
 			config JSONB NOT NULL,
 			status VARCHAR(255) NOT NULL);`)
@@ -176,7 +178,7 @@ func (cd *HandleT) CreateConnectionTable() {
 func (cd *HandleT) CreateNewServiceCatalogue(catalogue ServiceCatalogueT) bool {
 
 	sqlStatement := fmt.Sprintf(`INSERT INTO service_catalogue (name, type, access, category, url, notes, metadata, iconurl) values('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')`,
-			catalogue.Name, catalogue.Type, catalogue.Access, catalogue.Category, catalogue.Url, catalogue.Notes, catalogue.MetaData, catalogue.IconUrl)
+		catalogue.Name, catalogue.Type, catalogue.Access, catalogue.Category, catalogue.Url, catalogue.Notes, catalogue.MetaData, catalogue.IconUrl)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
@@ -190,56 +192,63 @@ func (cd *HandleT) CreateNewServiceCatalogue(catalogue ServiceCatalogueT) bool {
 
 func (cd *HandleT) GetServiceCatalogue(service_type string) []ServiceCatalogueT {
 
-	sqlStatement := "Select id, name, type, access, category, url, notes, metadata, iconurl FROM service_catalogue"
+	catalogues := []ServiceCatalogueT{}
+	yamlData, err := os.ReadFile("schemas/catalogue.yaml")
+	if err != nil {
+		log.Fatalf("Error reading file: %v", err)
+	}
+
+	err = yaml.Unmarshal(yamlData, &catalogues)
+	if err != nil {
+		log.Fatalf("Error unmarshaling YAML: %v", err)
+	}
+
+	var cataloguesType []ServiceCatalogueT
+	var catalogueType string
 
 	if service_type == "src" {
-		sqlStatement += " where type='Source'";
+		catalogueType = "Source"
 	} else if service_type == "dest" {
-		sqlStatement += " where type='Destination'";
+		catalogueType = "Destination"
 	}
 
-	rows, err := cd.dbHandle.Query(sqlStatement)
-
-	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch from service catalogue table. Error: %s", err))
-		return []ServiceCatalogueT{}
-	}
-
-	catalogues := []ServiceCatalogueT{}
-	for rows.Next() {
-		var cata ServiceCatalogueT
-		err := rows.Scan(&cata.ID, &cata.Name, &cata.Type, &cata.Access, &cata.Category, &cata.Url, &cata.Notes, &cata.MetaData, &cata.IconUrl)
-		if err == nil {
-			catalogues = append(catalogues, cata)
+	for _, item := range catalogues {
+		if item.Type == catalogueType {
+			cataloguesType = append(cataloguesType, item)
 		}
 	}
-	return catalogues
+	return cataloguesType
 
 }
 
 func (cd *HandleT) GetServiceCatalogueByID(ID int) (ServiceCatalogueT, error) {
-	sqlStatement := fmt.Sprintf("Select id, name, type, access, category, url, notes, metadata, iconurl FROM service_catalogue where id = %d", ID)
-	rows, err := cd.dbHandle.Query(sqlStatement)
 
+	catalogues := []ServiceCatalogueT{}
+	yamlData, err := os.ReadFile("schemas/catalogue.yaml")
 	if err != nil {
-		logger.Error(fmt.Sprintf("Failed to fetch from service catalogue table. Error: %s", err))
-		return ServiceCatalogueT{}, err
+		log.Fatalf("Error reading file: %v", err)
+	}
+
+	err = yaml.Unmarshal(yamlData, &catalogues)
+	if err != nil {
+		log.Fatalf("Error unmarshaling YAML: %v", err)
 	}
 
 	var cata ServiceCatalogueT
-	for rows.Next() {
-		err := rows.Scan(&cata.ID, &cata.Name, &cata.Type, &cata.Access, &cata.Category, &cata.Url, &cata.Notes, &cata.MetaData, &cata.IconUrl)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to fetch from service catalogue table. Error: %s", err))
-			return ServiceCatalogueT{}, err
+
+	for _, item := range catalogues {
+		if item.ID == ID {
+			cata = item
+			break
 		}
 	}
 	return cata, nil
+
 }
 
 func (cd *HandleT) DeleteServiceCatalogue(service_id string) bool {
 	sqlStatement := fmt.Sprintf("DELETE from service_catalogue where id=%s", service_id)
-	
+
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
 	if err != nil {
@@ -251,7 +260,7 @@ func (cd *HandleT) DeleteServiceCatalogue(service_id string) bool {
 }
 
 func (cd *HandleT) CreateNewSource(source SourceInstanceT) bool {
-	
+
 	sqlStatement := fmt.Sprintf(`INSERT INTO source (name, service_id, write_key, customer_id, config, status) values('%s', %d, '%s', %d, '%s', '%s') RETURNING id`, source.Name, source.ServiceID, source.WriteKey, 1, source.Config, "enabled")
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
@@ -265,7 +274,7 @@ func (cd *HandleT) CreateNewSource(source SourceInstanceT) bool {
 }
 
 func (cd *HandleT) GetAllSources() []SourceConnectionsT {
-	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, write_key, customer_id, config, status from source");
+	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, write_key, customer_id, config, status from source")
 
 	rows, err := cd.dbHandle.Query(sqlStatement)
 	if err != nil {
@@ -311,7 +320,7 @@ func (cd *HandleT) GetSourceByID(ID int) (SourceInstanceT, error) {
 			return SourceInstanceT{}, err
 		}
 	}
-	
+
 	return source, nil
 }
 
@@ -331,7 +340,7 @@ func (cd *HandleT) GetSourceDetailByID(ID int) (SourceDetailT, error) {
 }
 
 func (cd *HandleT) UpdateSource(source SourceInstanceT) bool {
-	sqlStatement := fmt.Sprintf("UPDATE source SET name='%s', service_id=%d, write_key='%s', customer_id=%d, config='%s', status='%s' where id = %d;", source.Name, source.ServiceID, source.WriteKey, source.CustomerID, source.Config, source.Status, source.ID);
+	sqlStatement := fmt.Sprintf("UPDATE source SET name='%s', service_id=%d, write_key='%s', customer_id=%d, config='%s', status='%s' where id = %d;", source.Name, source.ServiceID, source.WriteKey, source.CustomerID, source.Config, source.Status, source.ID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
@@ -339,11 +348,11 @@ func (cd *HandleT) UpdateSource(source SourceInstanceT) bool {
 		logger.Error(fmt.Sprintf("Failed to update the source inside the source table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
-func (cd* HandleT) DeleteSource(sourceID int) bool {
+func (cd *HandleT) DeleteSource(sourceID int) bool {
 	sqlStatement := fmt.Sprintf("DELETE from source where id = %d", sourceID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
@@ -352,12 +361,12 @@ func (cd* HandleT) DeleteSource(sourceID int) bool {
 		logger.Error(fmt.Sprintf("Failed to delete the source from the source table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
 func (cd *HandleT) GetAllDestinations() []DestinationConnectionsT {
-	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, customer_id, config, status from destination");
+	sqlStatement := fmt.Sprintf("SELECT id, name, service_id, customer_id, config, status from destination")
 
 	rows, err := cd.dbHandle.Query(sqlStatement)
 	if err != nil {
@@ -403,7 +412,7 @@ func (cd *HandleT) GetDestinationByID(ID int) (DestinationInstanceT, error) {
 			return DestinationInstanceT{}, err
 		}
 	}
-	
+
 	return destination, nil
 }
 
@@ -431,12 +440,12 @@ func (cd *HandleT) CreateNewDestination(destination DestinationInstanceT) bool {
 		logger.Error(fmt.Sprintf("Failed to create a new destination into the destination table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
 func (cd *HandleT) UpdateDestination(destination DestinationInstanceT) bool {
-	sqlStatement := fmt.Sprintf("UPDATE destination SET name='%s', service_id=%d, customer_id=%d, config='%s', status='%s' where id = %d;", destination.Name, destination.ServiceID, destination.CustomerID, destination.Config, destination.Status, destination.ID);
+	sqlStatement := fmt.Sprintf("UPDATE destination SET name='%s', service_id=%d, customer_id=%d, config='%s', status='%s' where id = %d;", destination.Name, destination.ServiceID, destination.CustomerID, destination.Config, destination.Status, destination.ID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
@@ -444,11 +453,11 @@ func (cd *HandleT) UpdateDestination(destination DestinationInstanceT) bool {
 		logger.Error(fmt.Sprintf("Failed to update the destination inside the destination table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
-func (cd* HandleT) DeleteDestination(destinationID int) bool {
+func (cd *HandleT) DeleteDestination(destinationID int) bool {
 	sqlStatement := fmt.Sprintf("DELETE from destination where id = %d", destinationID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
@@ -457,15 +466,15 @@ func (cd* HandleT) DeleteDestination(destinationID int) bool {
 		logger.Error(fmt.Sprintf("Failed to delete the destination from the destination table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
-func (cd* HandleT) GetConnectionByID(ID int) (ConnectionInstanceT, error) {
+func (cd *HandleT) GetConnectionByID(ID int) (ConnectionInstanceT, error) {
 	sqlStatement := fmt.Sprintf("SELECT id, source_id, destination_id, transforms FROM connection where id = %d", ID)
 
 	rows, err := cd.dbHandle.Query(sqlStatement)
-	
+
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to fetch a connection from connection table. Error: %s", err))
 		return ConnectionInstanceT{}, err
@@ -486,7 +495,7 @@ func (cd *HandleT) GetAllConnections() []ConnectionDetailT {
 	sqlStatement := fmt.Sprintf("SELECT id, source_id, destination_id, transforms FROM connection")
 
 	rows, err := cd.dbHandle.Query(sqlStatement)
-	
+
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to fetch connections from connection table. Error: %s", err))
 		return []ConnectionDetailT{}
@@ -523,12 +532,12 @@ func (cd *HandleT) CreateNewConnection(connection ConnectionInstanceT) bool {
 		logger.Error(fmt.Sprintf("Failed to create a new connection into the connection table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
 func (cd *HandleT) UpdateConnection(connection ConnectionInstanceT) bool {
-	sqlStatement := fmt.Sprintf("UPDATE connection SET source_id=%d, destination_id=%d, transforms='%s' where id = %d;", connection.SourceID, connection.DestinationID, connection.Transforms, connection.ID);
+	sqlStatement := fmt.Sprintf("UPDATE connection SET source_id=%d, destination_id=%d, transforms='%s' where id = %d;", connection.SourceID, connection.DestinationID, connection.Transforms, connection.ID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
 
@@ -536,11 +545,11 @@ func (cd *HandleT) UpdateConnection(connection ConnectionInstanceT) bool {
 		logger.Error(fmt.Sprintf("Failed to update the connection inside the connection table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 
-func (cd* HandleT) DeleteConnection(connectionID int) bool {
+func (cd *HandleT) DeleteConnection(connectionID int) bool {
 	sqlStatement := fmt.Sprintf("DELETE from connection where id = %d", connectionID)
 
 	_, err := cd.dbHandle.Exec(sqlStatement)
@@ -549,7 +558,7 @@ func (cd* HandleT) DeleteConnection(connectionID int) bool {
 		logger.Error(fmt.Sprintf("Failed to delete the connection from the connection table. Error: %s", err))
 		return false
 	}
-	
+
 	return true
 }
 

@@ -1,0 +1,193 @@
+- id: 11
+  name: Postgres
+  type: Source
+  access: DBPolling
+  category: Database
+  url: https://www.postgresql.org
+  notes: Pull Data directly from Postgres instance
+  metadata: '[{"name": "Schema", "type": "schema", "keyID": "schema", "defaultValue":
+    "{\"table_name\":\"eventlog\", \"schema_fields\":[]}"}]'
+  iconurl: static/icons/postgres.png
+- id: 7
+  name: Kafka
+  type: Source
+  access: Rest
+  category: Queue
+  url: https://kafka.apache.org/
+  notes: Pull Data from Kafka queue
+  metadata: '[{"name": "User", "type": "text", "keyID": "user"}, {"name": "Password",
+    "type": "password", "keyID": "password"}, {"name": "URL", "type": "text", "keyID":
+    "url"}]'
+  iconurl: static/icons/kafka.png
+- id: 8
+  name: AMQP
+  type: Source
+  access: AMQP
+  category: Queue
+  url: https://kassette.ai/
+  notes: Consume events from AMQP-compatible Broker
+  metadata: '[{"name": "User", "type": "text", "keyID": "user"}, {"name": "Password",
+    "type": "password", "keyID": "password"}, {"name": "URL", "type": "text", "keyID":
+    "url"}]'
+  iconurl: static/icons/amqp.png
+- id: 5
+  name: Google Analytics
+  type: Source
+  access: Rest
+  category: Web Analytics
+  url: https://analytics.google.com/analytics/web
+  notes: Pull Data from Google Analytics
+  metadata: '[{"name": "Client ID", "type": "text", "keyID": "client_id"}, {"name":
+    "Client Secret", "type": "text", "keyID": "client_secret"}]'
+  iconurl: static/icons/google.png
+- id: 6
+  name: Javascript
+  type: Source
+  access: Rest
+  category: Web Analytics
+  url: https://kassette.ai/sdk/javascript
+  notes: Send data from internal WEB Applications
+  metadata: '[{"name": "Client ID", "type": "text", "keyID": "client_id"}, {"name":
+    "Client Secret", "type": "text", "keyID": "client_secret"}]'
+  iconurl: static/icons/javascript.png
+- id: 1
+  name: Camunda
+  type: Source
+  access: Agent
+  category: Workflow
+  url: https://camunda.com/
+  notes: Camunda workflow management
+  metadata: '[{"name": "Schema", "type": "schema", "keyID": "schema", "defaultValue":
+    "{\"table_name\":\"eventlog\", \"schema_fields\":[{\"name\":\"event_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_instance\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_type\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_seq\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"process_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"assignee\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_start_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\"},{\"name\":\"task_end_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_duration\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"business_key\",\"type\":\"STRING\",\"mode\":\"view\"}]}"}]'
+  iconurl: static/icons/camunda.png
+- id: 13
+  name: Camunda REST
+  type: Source
+  access: Rest
+  category: Workflow
+  url: https://camunda.com
+  notes: ""
+  metadata: '[{"name": "schema", "type": "schema", "keyID": "schema", "description":
+    "Schema of Camunda event", "defaultValue": "{\n    \"table_name\": \"eventlog\",\n    \"schema_fields\":
+    [\n        {\n            \"name\": \"event_id\",\n            \"type\": \"STRING\",\n            \"mode\":
+    \"view\"\n        },\n        {\n            \"name\": \"process_instance\",\n            \"type\":
+    \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"task_name\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"task_type\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"task_seq\",\n            \"type\": \"INT\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"process_id\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"process_name\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"assignee\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"task_start_time\",\n            \"type\": \"TIMESTAMP\",\n            \"mode\":
+    \"view\"\n        },\n        {\n            \"name\": \"task_end_time\",\n            \"type\":
+    \"TIMESTAMP\",\n            \"mode\": \"view\",\n            \"primary_key\":
+    false\n        },\n        {\n            \"name\": \"task_duration\",\n            \"type\":
+    \"INT\",\n            \"mode\": \"view\"\n        },\n        {\n            \"name\":
+    \"business_key\",\n            \"type\": \"STRING\",\n            \"mode\": \"view\"\n        }\n    ]\n}\n"},
+    {"name": "URL", "type": "text", "keyID": "url", "description": "Full url for camunda
+    REST API", "defaultValue": "http://localhost:8090/engine-rest"}, {"name": "Count",
+    "type": "text", "keyID": "count", "description": "Number of events to fetch as
+    part of a single REST Call", "defaultValue": "100"}, {"name": "Polling interval",
+    "type": "text", "description": "How often to pull Camunda events in minutes",
+    "defaultValue": "5"}, {"name": "Activity Instance", "type": "text", "keyID": "activity-instance",
+    "description": "Collect Activity Instance events", "defaultValue": "true"}, {"name":
+    "Batch", "type": "text", "keyID": "batch", "description": "Collect Batch events",
+    "defaultValue": "false"}, {"name": "Case Instance", "type": "text", "keyID": "case-instance",
+    "description": "Collect Case Instance events", "defaultValue": "false"}, {"name":
+    "Case Activity Instance", "type": "text", "keyID": "case-activity-instance", "description":
+    "Collect Case Activity Instance events", "defaultValue": "false"}, {"name": "Decision
+    Instance", "type": "text", "keyID": "decision-instance", "description": "Collect
+    Decision Instance events", "defaultValue": "false"}, {"name": "Detail", "type":
+    "text", "keyID": "detail", "description": "Collect extended information for Process
+    Instance, an Activity Instance or a Task", "defaultValue": "false"}, {"name":
+    "Identity link log", "type": "text", "keyID": "identity-link-log", "description":
+    "Collect Identity link logs", "defaultValue": "false"}, {"name": "Incident", "type":
+    "text", "keyID": "incident", "description": "Collect Incidents", "defaultValue":
+    "false"}, {"name": "Job Log", "type": "text", "keyID": "job-log", "description":
+    "Collect Job Logs", "defaultValue": "false"}, {"name": "Process Definition", "type":
+    "text", "keyID": "process-definition", "description": "Collect Process Definition
+    history", "defaultValue": "false"}, {"name": "Process Instance", "type": "text",
+    "keyID": "process-instance", "description": "Collect Process Instance events",
+    "defaultValue": "false"}, {"name": "Task", "type": "text", "keyID": "task", "description":
+    "Collect Tasks", "defaultValue": "false"}, {"name": "User Operation Log", "type":
+    "text", "keyID": "user-operation", "description": "Collect User Operation Logs",
+    "defaultValue": "false"}, {"name": "Variable Instance", "type": "text", "keyID":
+    "variable-instance", "description": "Collect Variable Instance history", "defaultValue":
+    "false"}]'
+  iconurl: static/icons/camunda.png
+- id: 3
+  name: PowerBI
+  type: Destination
+  access: Rest
+  category: Business Intelligence
+  url: https://powerbi.microsoft.com
+  notes: Ingest your Data into PowerBI Platform
+  metadata: '[{"name": "Endpoint", "type": "text", "keyID": "endpoint"}]'
+  iconurl: static/icons/powerbi.png
+- id: 4
+  name: AWS S3
+  type: Destination
+  access: Rest
+  category: File Storage
+  url: https://aws.amazon.com/s3/
+  notes: Export Data into AWS S3
+  metadata: '[{"name": "Bucket Name", "type": "text", "keyID": "bucket"}, {"name":
+    "AWS Region", "type": "text", "keyID": "region"}, {"name": "Access Key", "type":
+    "text", "keyID": "accessKey"}, {"name": "Secret Key", "type": "text", "keyID":
+    "secretKey"}]'
+  iconurl: static/icons/s3.png
+- id: 12
+  name: Service Now
+  type: Destination
+  access: Rest
+  category: Process Management
+  url: https://www.servicenow.com
+  notes: Send to Service Now
+  metadata: '[{"name": "User", "type": "text", "keyID": "user"}, {"name": "Password",
+    "type": "password", "keyID": "password"}]'
+  iconurl: static/icons/servicenow.png
+- id: 10
+  name: SAP
+  type: Destination
+  access: Rest
+  category: Process Management
+  url: https://www.sap.com
+  notes: Send Data to SAP
+  metadata: '[{"name": "User", "type": "text", "keyID": "user"}, {"name": "Password",
+    "type": "password", "keyID": "password"}]'
+  iconurl: static/icons/sap.png
+- id: 2
+  name: Postgres
+  type: Destination
+  access: DBPolling
+  category: Database
+  url: https://www.postgresql.org
+  notes: Write to Postgres relational Database
+  metadata: '[{"name": "HOST", "type": "text", "keyID": "host"}, {"name": "Port",
+    "type": "text", "keyID": "port", "defaultValue": "5432"}, {"name": "Database",
+    "type": "text", "keyID": "database"}, {"name": "User", "type": "text", "keyID":
+    "user"}, {"name": "Password", "type": "text", "keyID": "password"}, {"name": "SSL
+    Mode", "type": "text", "keyID": "ssl_mode", "defaultValue": "disable"}, {"name":
+    "Schema", "type": "schema", "keyID": "schema", "defaultValue": "{\"table_name\":\"eventlog\",
+    \"schema_fields\":[{\"name\":\"event_id\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"process_instance\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_name\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_type\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_seq\",\"type\":\"INT\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"process_id\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"process_name\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"assignee\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_start_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_end_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_duration\",\"type\":\"int\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"business_key\",\"type\":\"VARCHAR\",\"mode\":\"view\",\"primary_key\":false}]}"},
+    {"name": "Batch Size", "type": "text", "keyID": "batch_size", "defaultValue":
+    "100"}]'
+  iconurl: static/icons/postgres.png
+- id: 9
+  name: Anaplan
+  type: Destination
+  access: Rest
+  category: Workforce Planning
+  url: https://www.anaplan.com
+  notes: Send Data to Anaplan for analysis
+  metadata: '[{"name": "AuthUrl", "type": "url", "keyID": "authurl", "defaultValue":
+    "https://auth.anaplan.com/token/authenticate"}, {"name": "Username", "type": "text",
+    "keyID": "username"}, {"name": "Password", "type": "text", "keyID": "password"},
+    {"name": "Schema", "type": "schema", "keyID": "schema", "defaultValue": "{\"table_name\":\"eventlog\",
+    \"schema_fields\":[{\"name\":\"event_id\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"process_instance\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_name\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_type\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_seq\",\"type\":\"NUMBER\",\"mode\":\"view\"},{\"name\":\"process_id\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"process_name\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"assignee\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_start_time\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_end_time\",\"type\":\"TEXT\",\"mode\":\"view\"},{\"name\":\"task_duration\",\"type\":\"NUMBER\",\"mode\":\"view\"},{\"name\":\"business_key\",\"type\":\"TEXT\",\"mode\":\"view\"}]}"},
+    {"name": "Url", "type": "url", "keyID": "url", "defaultValue": "https://api.anaplan.com/2/0/workspaces/{workspace_id}/models/{model_id}/lists/{list_id}/items?action=add"},
+    {"name": "Method", "type": "method", "keyID": "method"}, {"name": "Query", "type":
+    "json", "keyID": "query"}, {"name": "Header", "type": "json", "keyID": "header",
+    "defaultValue": "{\"Content-Type\": \"application/json\"}"}, {"name": "Refresh
+    Token Url", "type": "text", "keyID": "refreshtokenurl", "defaultValue": "https://auth.anaplan.com/token/refresh"}]'
+  iconurl: static/icons/anaplan.png
