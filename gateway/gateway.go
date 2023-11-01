@@ -33,6 +33,7 @@ import (
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
 	"kassette.ai/kassette-server/sources"
+	camunda "kassette.ai/kassette-server/sources/camunda"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 
@@ -44,6 +45,7 @@ var (
 	batchTimeout                              time.Duration
 	respMessage                               string
 	enabledWriteKeysSourceMap                 map[string]int
+	enabledWriteKeyWorkerSourceMapConfig      map[string]map[string]interface{}
 	connectionsMap                            map[string][]int
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
@@ -169,14 +171,21 @@ func backendConfigSubscriber() {
 		config := <-ch
 		configSubscriberLock.Lock()
 		enabledWriteKeysSourceMap = map[string]int{}
+		enabledWriteKeyWorkerSourceMapConfig = map[string]map[string]interface{}{}
 		connectionsMap = map[string][]int{}
 		detail := config.Data.(backendconfig.ConnectionDetailsT)
 		for _, conn := range detail.Connections {
 			source := conn.SourceDetail.Source
 			connection := conn.Connection
+			sourceType := conn.SourceDetail.Catalogue.Name
 			if source.Enabled() {
 				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
 				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
+			}
+			if source.Enabled() && sourceType == "Camunda" {
+				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey] = make(map[string]interface{})
+				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["id"] = source.ID
+				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["config"] = source.Config
 			}
 		}
 		configSubscriberLock.Unlock()
@@ -207,7 +216,55 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.Handl
 
 	go backendConfigSubscriber()
 
+	go gateway.startWorkerHandler()
+
 	gateway.startWebHandler()
+}
+
+func (gateway *HandleT) startWorkerHandler() {
+	//jsonString := `{"batch": [ {"name": "John", "age": 30, "city": "New York"}]}`
+	jsonString := `{"batch": [ { "event_id":"This is test event ----","process_instance":"fake instance","task_name":"some name","task_type":"task","task_seq":9,"process_id":"employee_order_processing","process_name":"","assignee":"","task_start_time":"2023-10-27T15:50:31.907Z","task_end_time":"2023-10-27T15:50:31.907Z","task_duration":0,"business_key":"customer28","root_process_instance":"8f32ee93-74e0-11ee-9c67-0242ac1d0005"}]}`
+	writeKey := "9fa370f301bb5fbe170d6def04a1775a"
+	payload := []byte(jsonString)
+	for {
+		gateway.ProcessWorkerRequest(payload, writeKey)
+		time.Sleep(2 * time.Second)
+		for key, value := range enabledWriteKeyWorkerSourceMapConfig {
+			log.Printf("Key: %s, Value: %v\n", key, value["config"])
+			if config, ok := value["config"].(string); ok {
+				camunda.ExtractCamundaRest(config)
+			} else {
+				log.Printf("Config not a string: %v", config)
+			}
+		}
+	}
+}
+
+func (gateway *HandleT) ProcessWorkerRequest(payload []byte, writeKey string) {
+	reqType := "batch"
+	ipAddr := "127.0.0.2"
+	userIDHeader := "kassette-worker"
+
+	log.Printf("Processing work request")
+
+	done := make(chan string, 1)
+
+	req := webRequestT{
+		done:           done,
+		reqType:        reqType,
+		requestPayload: payload,
+		writeKey:       writeKey,
+		ipAddr:         ipAddr,
+		userIDHeader:   userIDHeader,
+	}
+	gateway.webRequestQ <- &req
+
+	// TODO: Should wait here until response is processed
+	errorMessage := <-done
+	if errorMessage != "" {
+		logger.Error(fmt.Sprint("Error processing request: ", errorMessage))
+		return
+	}
 }
 
 func (gateway *HandleT) startWebHandler() {
