@@ -8,8 +8,6 @@ services:
       POSTGRES_USER: kassette_user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: kassette
-    volumes: 
-      - ./static.sql:/docker-entrypoint-initdb.d/01_create_service_catalogue.sql
     healthcheck:
       test: ["CMD-SHELL", "sh -c 'pg_isready -U kassette_user -d workflow'"]
       interval: 10s
