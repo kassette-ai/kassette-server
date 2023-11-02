@@ -72,7 +72,7 @@ func (cd *HandleT) Setup() {
 		log.Fatal("Failed to open DB connection", err)
 	}
 
-	cd.CreateServiceCatalogueTable()
+	//cd.CreateServiceCatalogueTable()
 	cd.CreateSourceTable()
 	cd.CreateDestinationTable()
 	cd.CreateConnectionTable()

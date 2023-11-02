@@ -47,8 +47,19 @@
   category: Web Analytics
   url: https://kassette.ai/sdk/javascript
   notes: Send data from internal WEB Applications
-  metadata: '[{"name": "Client ID", "type": "text", "keyID": "client_id"}, {"name":
-    "Client Secret", "type": "text", "keyID": "client_secret"}]'
+  metadata: |
+    [
+      {
+          "name": "Client ID",
+          "type": "text",
+          "keyID": "client_id"
+      },
+      {
+          "name": "Client Secret",
+          "type": "text",
+          "keyID": "client_secret"
+      }
+    ]
   iconurl: static/icons/javascript.png
 - id: 1
   name: Camunda
@@ -57,8 +68,15 @@
   category: Workflow
   url: https://camunda.com/
   notes: Camunda workflow management
-  metadata: '[{"name": "Schema", "type": "schema", "keyID": "schema", "defaultValue":
-    "{\"table_name\":\"eventlog\", \"schema_fields\":[{\"name\":\"event_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_instance\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_type\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_seq\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"process_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"assignee\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_start_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\"},{\"name\":\"task_end_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_duration\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"business_key\",\"type\":\"STRING\",\"mode\":\"view\"}]}"}]'
+  metadata: |
+    [
+      {
+          "name": "Schema",
+          "type": "schema",
+          "keyID": "schema",
+          "defaultValue": "{\"table_name\":\"eventlog\", \"schema_fields\":[{\"name\":\"event_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_instance\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_type\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_seq\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"process_id\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"process_name\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"assignee\",\"type\":\"STRING\",\"mode\":\"view\"},{\"name\":\"task_start_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\"},{\"name\":\"task_end_time\",\"type\":\"TIMESTAMP\",\"mode\":\"view\",\"primary_key\":false},{\"name\":\"task_duration\",\"type\":\"INT\",\"mode\":\"view\"},{\"name\":\"business_key\",\"type\":\"STRING\",\"mode\":\"view\"}]}"
+      }
+    ]
   iconurl: static/icons/camunda.png
 - id: 13
   name: Camunda REST
@@ -88,7 +106,7 @@
     REST API", "defaultValue": "http://localhost:8090/engine-rest"}, {"name": "Count",
     "type": "text", "keyID": "count", "description": "Number of events to fetch as
     part of a single REST Call", "defaultValue": "100"}, {"name": "Polling interval",
-    "type": "text", "description": "How often to pull Camunda events in minutes",
+    "type": "text", "description": "How often to pull Camunda events in minutes", "keyID": "interval",
     "defaultValue": "5"}, {"name": "Activity Instance", "type": "text", "keyID": "activity-instance",
     "description": "Collect Activity Instance events", "defaultValue": "true"}, {"name":
     "Batch", "type": "text", "keyID": "batch", "description": "Collect Batch events",

@@ -33,7 +33,6 @@ import (
 	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/response"
 	"kassette.ai/kassette-server/sources"
-	camunda "kassette.ai/kassette-server/sources/camunda"
 	"kassette.ai/kassette-server/utils"
 	"kassette.ai/kassette-server/utils/logger"
 
@@ -177,12 +176,12 @@ func backendConfigSubscriber() {
 		for _, conn := range detail.Connections {
 			source := conn.SourceDetail.Source
 			connection := conn.Connection
-			sourceType := conn.SourceDetail.Catalogue.Name
+			sourceAccess := conn.SourceDetail.Catalogue.Access
 			if source.Enabled() {
 				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
 				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
 			}
-			if source.Enabled() && sourceType == "Camunda" {
+			if source.Enabled() && sourceAccess == "Rest" {
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey] = make(map[string]interface{})
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["id"] = source.ID
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["config"] = source.Config
@@ -222,22 +221,57 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.Handl
 }
 
 func (gateway *HandleT) startWorkerHandler() {
-	//jsonString := `{"batch": [ {"name": "John", "age": 30, "city": "New York"}]}`
-	jsonString := `{"batch": [ { "event_id":"This is test event ----","process_instance":"fake instance","task_name":"some name","task_type":"task","task_seq":9,"process_id":"employee_order_processing","process_name":"","assignee":"","task_start_time":"2023-10-27T15:50:31.907Z","task_end_time":"2023-10-27T15:50:31.907Z","task_duration":0,"business_key":"customer28","root_process_instance":"8f32ee93-74e0-11ee-9c67-0242ac1d0005"}]}`
-	writeKey := "9fa370f301bb5fbe170d6def04a1775a"
-	payload := []byte(jsonString)
-	for {
-		gateway.ProcessWorkerRequest(payload, writeKey)
-		time.Sleep(2 * time.Second)
-		for key, value := range enabledWriteKeyWorkerSourceMapConfig {
-			log.Printf("Key: %s, Value: %v\n", key, value["config"])
-			if config, ok := value["config"].(string); ok {
-				camunda.ExtractCamundaRest(config)
-			} else {
-				log.Printf("Config not a string: %v", config)
-			}
+	log.Printf("Started worker handler")
+	for writeKey, value := range enabledWriteKeyWorkerSourceMapConfig {
+		if config, ok := value["config"].(string); ok {
+			go gateway.startWorkerHandlerPerSource(writeKey, config)
+		} else {
+			log.Printf("Config not a string: %v", config)
 		}
 	}
+
+}
+
+func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config string) {
+	log.Printf("Started worker handler for writekey: %s", writeKey)
+	var srcConfig map[string]interface{}
+
+	err := json.Unmarshal([]byte(config), &srcConfig)
+	if err != nil {
+		log.Printf("Error in the Source config: %v", err)
+		return
+	}
+	count, countExists := srcConfig["count"].(string)
+	interval, intervalExists := srcConfig["interval"].(string)
+	url, urlExists := srcConfig["url"].(string)
+
+	if countExists && intervalExists && urlExists {
+		log.Printf("Configuration of the Rest API: url: %s, interval: %v, count: %v", url, interval, count)
+	} else {
+		log.Printf("Error, missing required parameters: %v", srcConfig)
+		return
+	}
+
+	intervalInt, err := strconv.Atoi(interval)
+	if err != nil {
+		log.Printf("Error: failed to convert interval into number")
+		return
+	}
+
+	duration := time.Duration(intervalInt*60) * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case t := <-ticker.C:
+			log.Println("Ticker triggered at:", t) //my function, here we put our exctract function
+			jsonString := `{"batch": [ { "event_id":"This is test event ----","process_instance":"fake instance","task_name":"some name","task_type":"task","task_seq":9,"process_id":"employee_order_processing","process_name":"","assignee":"","task_start_time":"2023-10-27T15:50:31.907Z","task_end_time":"2023-10-27T15:50:31.907Z","task_duration":0,"business_key":"customer28","root_process_instance":"8f32ee93-74e0-11ee-9c67-0242ac1d0005"}]}`
+			writeKey := "9fa370f301bb5fbe170d6def04a1775a"
+			payload := []byte(jsonString)
+			gateway.ProcessWorkerRequest(payload, writeKey) //this is just a temp thing
+		}
+	}
+
 }
 
 func (gateway *HandleT) ProcessWorkerRequest(payload []byte, writeKey string) {
