@@ -17,6 +17,7 @@ import (
 
 	"github.com/bugsnag/bugsnag-go"
 	stats "kassette.ai/kassette-server/services"
+	"kassette.ai/kassette-server/sources/camunda"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -177,6 +178,7 @@ func backendConfigSubscriber() {
 			source := conn.SourceDetail.Source
 			connection := conn.Connection
 			sourceAccess := conn.SourceDetail.Catalogue.Access
+			catalogueSourceId := conn.SourceDetail.Catalogue.ID // static IDs defined in service catalogue
 			if source.Enabled() {
 				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
 				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
@@ -185,6 +187,7 @@ func backendConfigSubscriber() {
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey] = make(map[string]interface{})
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["id"] = source.ID
 				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["config"] = source.Config
+				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["catalogueSrcId"] = catalogueSourceId
 			}
 		}
 		configSubscriberLock.Unlock()
@@ -223,8 +226,11 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.Handl
 func (gateway *HandleT) startWorkerHandler() {
 	log.Printf("Started worker handler")
 	for writeKey, value := range enabledWriteKeyWorkerSourceMapConfig {
-		if config, ok := value["config"].(string); ok {
-			go gateway.startWorkerHandlerPerSource(writeKey, config)
+		config, ok := value["config"].(string)
+		catalogueSrcId, ok1 := value["catalogueSrcId"].(int)
+		if ok && ok1 {
+			log.Printf("Config: %v, catalogueSrcId: %v", config, catalogueSrcId)
+			go gateway.startWorkerHandlerPerSource(writeKey, config, catalogueSrcId)
 		} else {
 			log.Printf("Config not a string: %v", config)
 		}
@@ -232,7 +238,7 @@ func (gateway *HandleT) startWorkerHandler() {
 
 }
 
-func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config string) {
+func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config string, catalogueSrcId int) {
 	log.Printf("Started worker handler for writekey: %s", writeKey)
 	var srcConfig map[string]interface{}
 
@@ -264,7 +270,15 @@ func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config stri
 	for {
 		select {
 		case t := <-ticker.C:
-			log.Println("Ticker triggered at:", t) //my function, here we put our exctract function
+			log.Println("Ticker extract funtion triggered at:", t) //my function, here we put our exctract function
+			switch catalogueSrcId {
+			case 13: // 13 is Camunda Rest in service catalogue
+				log.Printf("Start Camunda Rest extraction")
+				payload, err := camunda.ExtractCamundaRest(config, t)
+				if err != nil {
+					log.Printf("extracted payload: %v", payload)
+				}
+			}
 			jsonString := `{"batch": [ { "event_id":"This is test event ----","process_instance":"fake instance","task_name":"some name","task_type":"task","task_seq":9,"process_id":"employee_order_processing","process_name":"","assignee":"","task_start_time":"2023-10-27T15:50:31.907Z","task_end_time":"2023-10-27T15:50:31.907Z","task_duration":0,"business_key":"customer28","root_process_instance":"8f32ee93-74e0-11ee-9c67-0242ac1d0005"}]}`
 			writeKey := "9fa370f301bb5fbe170d6def04a1775a"
 			payload := []byte(jsonString)

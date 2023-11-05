@@ -107,7 +107,9 @@
     "type": "text", "keyID": "count", "description": "Number of events to fetch as
     part of a single REST Call", "defaultValue": "100"}, {"name": "Polling interval",
     "type": "text", "description": "How often to pull Camunda events in minutes", "keyID": "interval",
-    "defaultValue": "5"}, {"name": "Activity Instance", "type": "text", "keyID": "activity-instance",
+    "defaultValue": "5"}, {"name": "Minutes behind",
+    "type": "text", "description": "How many minutes behind from current time, should be bigger then interval", "keyID": "history",
+    "defaultValue": "10"}, {"name": "Activity Instance", "type": "text", "keyID": "activity-instance",
     "description": "Collect Activity Instance events", "defaultValue": "true"}, {"name":
     "Batch", "type": "text", "keyID": "batch", "description": "Collect Batch events",
     "defaultValue": "false"}, {"name": "Case Instance", "type": "text", "keyID": "case-instance",
