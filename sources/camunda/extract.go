@@ -55,11 +55,10 @@ type ActivityInstance struct {
 	TenantId                 string `json:"tenantId"`
 	RemovalTime              string `json:"removalTime"`
 	RootProcessInstanceId    string `json:"rootProcessInstanceId"`
+	KassetteCamundaType      string `json:"kassetteCamundaType"`
 }
 
-func camundaHistoryRest(url string, api string, batchSize int, fromTime string, toTime string) ([]ActivityInstance, error) {
-
-	var payload []ActivityInstance
+func camundaHistoryRest(url string, api string, batchSize int, fromTime string, toTime string) ([]byte, error) {
 
 	camundaRestApi := url + "/history/" + api
 	queryParams := map[string]string{
@@ -115,15 +114,8 @@ func camundaHistoryRest(url string, api string, batchSize int, fromTime string, 
 		return nil, err
 	}
 
-	err = json.Unmarshal(body, &payload)
-	if err != nil {
-		log.Printf("Failed parsing response Body %v", err)
-		return nil, err
-	}
+	return body, nil
 
-	// Process the response
-	// log.Printf("Response Status: %v and data: %v", resp.Status, payload)
-	return payload, nil
 }
 
 func ExtractCamundaRest(config string, t time.Time) ([]byte, int, error) {
@@ -154,21 +146,34 @@ func ExtractCamundaRest(config string, t time.Time) ([]byte, int, error) {
 
 	if camundaConfig.ActivityInstance == "true" {
 		log.Printf("Polling activityinstance data")
+		var payload []ActivityInstance
 		activityInstancePayload, err := camundaHistoryRest(camundaConfig.Url, "activity-instance", 100, from, to)
 		if err != nil {
 			log.Printf("Failed extracting activiti-instance data: %v", err)
 			return nil, 0, err
 		}
-		payload := make(map[string][]ActivityInstance)
-		payload["batch"] = activityInstancePayload
 
-		jsonData, err := json.Marshal(payload)
+		errj := json.Unmarshal(activityInstancePayload, &payload)
+		if errj != nil {
+			log.Printf("Failed parsing response Body %v", errj)
+			return nil, 0, errj
+		}
+
+		//updating metadata for every event
+		for i := range payload {
+			payload[i].KassetteCamundaType = "activity-instance"
+		}
+
+		payloadBatch := make(map[string][]ActivityInstance)
+		payloadBatch["batch"] = payload
+
+		jsonData, err := json.Marshal(payloadBatch)
 		if err != nil {
 			log.Printf("Can't convert into JSON: %v", err)
 			return nil, 0, err
 		}
 
-		return jsonData, len(activityInstancePayload), nil
+		return jsonData, len(payload), nil
 
 	}
 	return nil, 0, nil
