@@ -274,21 +274,24 @@ func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config stri
 			switch catalogueSrcId {
 			case 13: // 13 is Camunda Rest in service catalogue
 				log.Printf("Start Camunda Rest extraction")
-				payload, err := camunda.ExtractCamundaRest(config, t)
+				payload, count, err := camunda.ExtractCamundaRest(config, t)
 				if err != nil {
-					log.Printf("extracted payload: %v", payload)
+					log.Printf("Failed to exctract payload: %v", payload)
+				} else {
+					if count > 0 {
+						gateway.ProcessWorkerRequest(payload, writeKey)
+					} else {
+						log.Printf("No Data for the time interval: %s", t)
+					}
 				}
 			}
-			jsonString := `{"batch": [ { "event_id":"This is test event ----","process_instance":"fake instance","task_name":"some name","task_type":"task","task_seq":9,"process_id":"employee_order_processing","process_name":"","assignee":"","task_start_time":"2023-10-27T15:50:31.907Z","task_end_time":"2023-10-27T15:50:31.907Z","task_duration":0,"business_key":"customer28","root_process_instance":"8f32ee93-74e0-11ee-9c67-0242ac1d0005"}]}`
-			writeKey := "9fa370f301bb5fbe170d6def04a1775a"
-			payload := []byte(jsonString)
-			gateway.ProcessWorkerRequest(payload, writeKey) //this is just a temp thing
 		}
 	}
 
 }
 
 func (gateway *HandleT) ProcessWorkerRequest(payload []byte, writeKey string) {
+	// populating static info for internal worker process
 	reqType := "batch"
 	ipAddr := "127.0.0.2"
 	userIDHeader := "kassette-worker"
