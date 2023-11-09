@@ -270,18 +270,16 @@ func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config stri
 	for {
 		select {
 		case t := <-ticker.C:
-			log.Println("Ticker extract funtion triggered at:", t) //my function, here we put our exctract function
+			log.Println("Ticker extract funtion triggered at:", t)
 			switch catalogueSrcId {
 			case 13: // 13 is Camunda Rest in service catalogue
 				log.Printf("Start Camunda Rest extraction")
-				payload, count, err := camunda.ExtractCamundaRest(config, t)
+				combinedPayloads, err := camunda.ExtractCamundaRest(config, t)
 				if err != nil {
-					log.Printf("Failed to exctract payload: %v", payload)
+					log.Printf("Failed to exctract payload: %v", err)
 				} else {
-					if count > 0 {
+					for _, payload := range combinedPayloads {
 						gateway.ProcessWorkerRequest(payload, writeKey)
-					} else {
-						log.Printf("No Data for the time interval: %s", t)
 					}
 				}
 			}

@@ -55,7 +55,25 @@ type ActivityInstance struct {
 	TenantId                 string `json:"tenantId"`
 	RemovalTime              string `json:"removalTime"`
 	RootProcessInstanceId    string `json:"rootProcessInstanceId"`
-	KassetteCamundaType      string `json:"kassetteCamundaType"`
+	KassetteType             string `json:"kassetteType"`
+}
+
+type ProcessInstance struct {
+	Id                     string `json:"id"`
+	SuperProcessInstanceId string `json:"superProcessInstanceId"`
+	SuperCaseInstanceId    string `json:"superCaseInstanceId"`
+	CaseInstanceId         string `json:"caseInstanceId"`
+	ProcessDefinitionKey   string `json:"processDefinitionKey"`
+	ProcessDefinitionId    string `json:"processDefinitionId"`
+	BusinessKey            string `json:"businessKey"`
+	StartTime              string `json:"startTime"`
+	EndTime                string `json:"endTime"`
+	DurationInMillis       int    `json:"durationInMillis"`
+	StartUserId            string `json:"startUserId"`
+	StartActivityId        string `json:"startActivityId"`
+	DeleteReason           string `json:"deleteReason"`
+	TenantId               string `json:"tenantId"`
+	KassetteType           string `json:"kassetteType"`
 }
 
 func camundaHistoryRest(url string, api string, batchSize int, fromTime string, toTime string) ([]byte, error) {
@@ -118,24 +136,25 @@ func camundaHistoryRest(url string, api string, batchSize int, fromTime string, 
 
 }
 
-func ExtractCamundaRest(config string, t time.Time) ([]byte, int, error) {
+func ExtractCamundaRest(config string, t time.Time) ([][]byte, error) {
 	var camundaConfig CamundaSourceConfig
+	var combinedCamundaPayload [][]byte
 	err := json.Unmarshal([]byte(config), &camundaConfig)
 	if err != nil {
 		log.Printf("Error in the Source config: %v", err)
-		return nil, 0, errors.New("Failed to parse Camunda SRC config")
+		return nil, errors.New("Failed to parse Camunda SRC config")
 	}
 
 	intervalInt, err := strconv.Atoi(camundaConfig.Interval)
 	if err != nil {
 		log.Printf("Error: failed to convert interval into number")
-		return nil, 0, errors.New("failed to convert interval into number")
+		return nil, errors.New("failed to convert interval into number")
 	}
 
 	historyInt, err := strconv.Atoi(camundaConfig.History)
 	if err != nil {
 		log.Printf("Error: failed to convert history into number")
-		return nil, 0, errors.New("failed to convert interval into number")
+		return nil, errors.New("failed to convert interval into number")
 	}
 
 	history := time.Duration(historyInt*60) * time.Second
@@ -150,18 +169,18 @@ func ExtractCamundaRest(config string, t time.Time) ([]byte, int, error) {
 		activityInstancePayload, err := camundaHistoryRest(camundaConfig.Url, "activity-instance", 100, from, to)
 		if err != nil {
 			log.Printf("Failed extracting activiti-instance data: %v", err)
-			return nil, 0, err
+			return nil, err
 		}
 
 		errj := json.Unmarshal(activityInstancePayload, &payload)
 		if errj != nil {
 			log.Printf("Failed parsing response Body %v", errj)
-			return nil, 0, errj
+			return nil, errj
 		}
 
 		//updating metadata for every event
 		for i := range payload {
-			payload[i].KassetteCamundaType = "activity-instance"
+			payload[i].KassetteType = "activity-instance"
 		}
 
 		payloadBatch := make(map[string][]ActivityInstance)
@@ -170,11 +189,48 @@ func ExtractCamundaRest(config string, t time.Time) ([]byte, int, error) {
 		jsonData, err := json.Marshal(payloadBatch)
 		if err != nil {
 			log.Printf("Can't convert into JSON: %v", err)
-			return nil, 0, err
+			return nil, err
+		}
+		if len(payload) > 0 {
+			combinedCamundaPayload = append(combinedCamundaPayload, jsonData)
 		}
 
-		return jsonData, len(payload), nil
+	}
+
+	if camundaConfig.ProcessInstace == "true" {
+		log.Printf("Polling processinstance data")
+		var payload []ProcessInstance
+		processInstancePayload, err := camundaHistoryRest(camundaConfig.Url, "process-instance", 100, from, to)
+		if err != nil {
+			log.Printf("Failed extracting process-instance data: %v", err)
+			return nil, err
+		}
+
+		errj := json.Unmarshal(processInstancePayload, &payload)
+		if errj != nil {
+			log.Printf("Failed parsing response Body %v", errj)
+			return nil, errj
+		}
+
+		//updating metadata for every event
+		for i := range payload {
+			payload[i].KassetteType = "process-instance"
+		}
+
+		payloadBatch := make(map[string][]ProcessInstance)
+		payloadBatch["batch"] = payload
+
+		jsonData, err := json.Marshal(payloadBatch)
+		if err != nil {
+			log.Printf("Can't convert into JSON: %v", err)
+			return nil, err
+		}
+
+		if len(payload) > 0 {
+			combinedCamundaPayload = append(combinedCamundaPayload, jsonData)
+		}
 
 	}
-	return nil, 0, nil
+
+	return combinedCamundaPayload, nil
 }
