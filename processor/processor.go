@@ -270,6 +270,10 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
 			srcConverter = &camunda.TransformerHandleT{}
 			srcSkipWithNoSchema = false
+		case "Camunda REST":
+			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
+			srcConverter = &camunda.TransformerHandleT{}
+			srcSkipWithNoSchema = false
 		case "Postgres":
 			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
 			srcConverter = &srcpostgres.TransformerHandleT{}
