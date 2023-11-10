@@ -8,7 +8,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 type CamundaSourceConfig struct {
@@ -31,49 +35,6 @@ type CamundaSourceConfig struct {
 	VariableInstance     string `json:"variable-instance"`
 	ProcessDefinition    string `json:"process-definition"`
 	CaseActivityInstance string `json:"case-activity-instance"`
-}
-
-type ActivityInstance struct {
-	Id                       string `json:"id"`
-	ParentActivityInstanceId string `json:"parentActivityInstanceId"`
-	ActivityId               string `json:"activityId"`
-	ActivityName             string `json:"activityName"`
-	ActivityType             string `json:"activityType"`
-	ProcessDefinitionKey     string `json:"processDefinitionKey"`
-	ProcessDefinitionId      string `json:"processDefinitionId"`
-	ProcessInstanceId        string `json:"processInstanceId"`
-	ExecutionId              string `json:"executionId"`
-	TaskId                   string `json:"taskId"`
-	CalledProcessInstanceId  string `json:"calledProcessInstanceId"`
-	CalledCaseInstanceId     string `json:"calledCaseInstanceId"`
-	Assignee                 string `json:"assignee"`
-	StartTime                string `json:"startTime"`
-	EndTime                  string `json:"endTime"`
-	DurationInMillis         int    `json:"durationInMillis"`
-	Canceled                 bool   `json:"canceled"`
-	CompleteScope            bool   `json:"completeScope"`
-	TenantId                 string `json:"tenantId"`
-	RemovalTime              string `json:"removalTime"`
-	RootProcessInstanceId    string `json:"rootProcessInstanceId"`
-	KassetteType             string `json:"kassetteType"`
-}
-
-type ProcessInstance struct {
-	Id                     string `json:"id"`
-	SuperProcessInstanceId string `json:"superProcessInstanceId"`
-	SuperCaseInstanceId    string `json:"superCaseInstanceId"`
-	CaseInstanceId         string `json:"caseInstanceId"`
-	ProcessDefinitionKey   string `json:"processDefinitionKey"`
-	ProcessDefinitionId    string `json:"processDefinitionId"`
-	BusinessKey            string `json:"businessKey"`
-	StartTime              string `json:"startTime"`
-	EndTime                string `json:"endTime"`
-	DurationInMillis       int    `json:"durationInMillis"`
-	StartUserId            string `json:"startUserId"`
-	StartActivityId        string `json:"startActivityId"`
-	DeleteReason           string `json:"deleteReason"`
-	TenantId               string `json:"tenantId"`
-	KassetteType           string `json:"kassetteType"`
 }
 
 func camundaHistoryRest(url string, api string, batchSize int, fromTime string, toTime string) ([]byte, error) {
@@ -132,8 +93,19 @@ func camundaHistoryRest(url string, api string, batchSize int, fromTime string, 
 		return nil, err
 	}
 
-	return body, nil
-
+	trimmedJSON := strings.TrimSpace(string(body))
+	if trimmedJSON == "[]" || trimmedJSON == "null" {
+		log.Printf("Response is empty, no data for this interval")
+		return nil, nil
+	} else {
+		payload := []byte(fmt.Sprintf("{ \"batch\": %s }", body))
+		batchReqs := gjson.GetBytes(payload, "batch")
+		batchReqs.ForEach(func(index, req gjson.Result) bool {
+			payload, _ = sjson.SetBytes(payload, fmt.Sprintf(`batch.%v.kassetteType`, index), api)
+			return true // keep iterating
+		})
+		return payload, nil
+	}
 }
 
 func ExtractCamundaRest(config string, t time.Time) ([][]byte, error) {
@@ -165,71 +137,27 @@ func ExtractCamundaRest(config string, t time.Time) ([][]byte, error) {
 
 	if camundaConfig.ActivityInstance == "true" {
 		log.Printf("Polling activityinstance data")
-		var payload []ActivityInstance
-		activityInstancePayload, err := camundaHistoryRest(camundaConfig.Url, "activity-instance", 100, from, to)
+		body, err := camundaHistoryRest(camundaConfig.Url, "activity-instance", 100, from, to)
 		if err != nil {
 			log.Printf("Failed extracting activiti-instance data: %v", err)
 			return nil, err
 		}
 
-		errj := json.Unmarshal(activityInstancePayload, &payload)
-		if errj != nil {
-			log.Printf("Failed parsing response Body %v", errj)
-			return nil, errj
+		if body != nil {
+			combinedCamundaPayload = append(combinedCamundaPayload, body)
 		}
-
-		//updating metadata for every event
-		for i := range payload {
-			payload[i].KassetteType = "activity-instance"
-		}
-
-		payloadBatch := make(map[string][]ActivityInstance)
-		payloadBatch["batch"] = payload
-
-		jsonData, err := json.Marshal(payloadBatch)
-		if err != nil {
-			log.Printf("Can't convert into JSON: %v", err)
-			return nil, err
-		}
-		if len(payload) > 0 {
-			combinedCamundaPayload = append(combinedCamundaPayload, jsonData)
-		}
-
 	}
 
 	if camundaConfig.ProcessInstace == "true" {
 		log.Printf("Polling processinstance data")
-		var payload []ProcessInstance
-		processInstancePayload, err := camundaHistoryRest(camundaConfig.Url, "process-instance", 100, from, to)
+		body, err := camundaHistoryRest(camundaConfig.Url, "process-instance", 100, from, to)
 		if err != nil {
 			log.Printf("Failed extracting process-instance data: %v", err)
 			return nil, err
 		}
-
-		errj := json.Unmarshal(processInstancePayload, &payload)
-		if errj != nil {
-			log.Printf("Failed parsing response Body %v", errj)
-			return nil, errj
+		if body != nil {
+			combinedCamundaPayload = append(combinedCamundaPayload, body)
 		}
-
-		//updating metadata for every event
-		for i := range payload {
-			payload[i].KassetteType = "process-instance"
-		}
-
-		payloadBatch := make(map[string][]ProcessInstance)
-		payloadBatch["batch"] = payload
-
-		jsonData, err := json.Marshal(payloadBatch)
-		if err != nil {
-			log.Printf("Can't convert into JSON: %v", err)
-			return nil, err
-		}
-
-		if len(payload) > 0 {
-			combinedCamundaPayload = append(combinedCamundaPayload, jsonData)
-		}
-
 	}
 
 	return combinedCamundaPayload, nil
