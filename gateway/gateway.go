@@ -45,7 +45,7 @@ var (
 	batchTimeout                              time.Duration
 	respMessage                               string
 	enabledWriteKeysSourceMap                 map[string]int
-	enabledWriteKeyWorkerSourceMapConfig      map[string]map[string]interface{}
+	enabledWriteKeysWorkerPollingMap          map[string]map[string]interface{}
 	connectionsMap                            map[string][]int
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
@@ -171,7 +171,7 @@ func backendConfigSubscriber() {
 		config := <-ch
 		configSubscriberLock.Lock()
 		enabledWriteKeysSourceMap = map[string]int{}
-		enabledWriteKeyWorkerSourceMapConfig = map[string]map[string]interface{}{}
+		enabledWriteKeysWorkerPollingMap = map[string]map[string]interface{}{}
 		connectionsMap = map[string][]int{}
 		detail := config.Data.(backendconfig.ConnectionDetailsT)
 		for _, conn := range detail.Connections {
@@ -184,10 +184,10 @@ func backendConfigSubscriber() {
 				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
 			}
 			if source.Enabled() && sourceAccess == "Rest" {
-				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey] = make(map[string]interface{})
-				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["id"] = source.ID
-				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["config"] = source.Config
-				enabledWriteKeyWorkerSourceMapConfig[source.WriteKey]["catalogueSrcId"] = catalogueSourceId
+				enabledWriteKeysWorkerPollingMap[source.WriteKey] = make(map[string]interface{})
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["id"] = source.ID
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["config"] = source.Config
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["catalogueSrcId"] = catalogueSourceId
 			}
 		}
 		configSubscriberLock.Unlock()
@@ -218,27 +218,32 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.Handl
 
 	go backendConfigSubscriber()
 
-	go gateway.startWorkerHandler()
+	go gateway.startWorkerHandlerTickers()
 
 	gateway.startWebHandler()
 }
 
-func (gateway *HandleT) startWorkerHandler() {
+func (gateway *HandleT) startWorkerHandlerTickers() {
 	log.Printf("Started worker handler")
-	for writeKey, value := range enabledWriteKeyWorkerSourceMapConfig {
+	for writeKey, value := range enabledWriteKeysWorkerPollingMap {
 		config, ok := value["config"].(string)
-		catalogueSrcId, ok1 := value["catalogueSrcId"].(int)
-		if ok && ok1 {
-			log.Printf("Config: %v, catalogueSrcId: %v", config, catalogueSrcId)
-			go gateway.startWorkerHandlerPerSource(writeKey, config, catalogueSrcId)
-		} else {
-			log.Printf("Config not a string: %v", config)
+		if !ok {
+			log.Printf("Unable to load config %v", config)
+			return
 		}
-	}
+		catalogueSrcId, ok := value["catalogueSrcId"].(int)
+		if ok {
+			log.Printf("Config: %v, catalogueSrcId: %v", config, catalogueSrcId)
+			go gateway.startWorkerHandlerTickerForSource(writeKey, config, catalogueSrcId)
+		} else {
+			log.Printf("Unable to locate source Id: %v", config)
+			return
+		}
 
+	}
 }
 
-func (gateway *HandleT) startWorkerHandlerPerSource(writeKey string, config string, catalogueSrcId int) {
+func (gateway *HandleT) startWorkerHandlerTickerForSource(writeKey string, config string, catalogueSrcId int) {
 	log.Printf("Started worker handler for writekey: %s", writeKey)
 	var srcConfig map[string]interface{}
 
