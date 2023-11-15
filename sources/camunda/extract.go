@@ -40,72 +40,86 @@ type CamundaSourceConfig struct {
 func camundaHistoryRest(url string, api string, batchSize int, fromTime string, toTime string) ([]byte, error) {
 
 	camundaRestApi := url + "/history/" + api
-	queryParams := map[string]string{
-		"sortOrder":     "asc",
-		"sortBy":        "startTime",
-		"startedAfter":  fromTime,
-		"startedBefore": toTime,
+	queryParamsAll := []map[string]string{
+		{"sortOrder": "asc", "sortBy": "startTime", "startedAfter": fromTime, "startedBefore": toTime},
+		{"sortOrder": "asc", "sortBy": "startTime", "finishedAfter": fromTime, "finishedBefore": toTime},
 	}
-
+	var payloads []string
 	// Create a map for headers
 	headers := map[string]string{
 		"Content-Type": "application/json",
 	}
 
-	// Build the URL with query parameters
-	req, err := http.NewRequest("GET", camundaRestApi, nil)
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return nil, err
+	for _, queryParams := range queryParamsAll {
+		// Build the URL with query parameters
+		req, err := http.NewRequest("GET", camundaRestApi, nil)
+		if err != nil {
+			fmt.Println("Error creating request:", err)
+			return nil, err
+		}
+
+		q := req.URL.Query()
+		for key, value := range queryParams {
+			q.Add(key, value)
+		}
+
+		log.Printf("Making Get request to %v with parameters %v", camundaRestApi, queryParams)
+		req.URL.RawQuery = q.Encode()
+
+		// Add headers to the request
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+
+		// Make the HTTP GET request
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Println("Error making request:", err)
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		// Check the response status
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Request failed with status: %s\n", resp.Status)
+			return nil, err
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Failed reading Body response %v", err)
+			return nil, err
+		}
+
+		trimmedJSON := strings.TrimSpace(string(body))
+		if trimmedJSON == "[]" || trimmedJSON == "null" {
+			log.Printf("Response is empty, no data for this interval")
+			continue
+		} else {
+			trimmedBody := strings.Trim(string(body), "[]")
+			payloads = append(payloads, trimmedBody)
+		}
 	}
 
-	q := req.URL.Query()
-	for key, value := range queryParams {
-		q.Add(key, value)
-	}
+	payloadCount := len(payloads)
+	var payload string
 
-	log.Printf("Making Get request to %v with parameters %v", camundaRestApi, queryParams)
-	req.URL.RawQuery = q.Encode()
-
-	// Add headers to the request
-	for key, value := range headers {
-		req.Header.Add(key, value)
-	}
-
-	// Make the HTTP GET request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("Error making request:", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Check the response status
-	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("Request failed with status: %s\n", resp.Status)
-		return nil, err
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("Failed reading Body response %v", err)
-		return nil, err
-	}
-
-	trimmedJSON := strings.TrimSpace(string(body))
-	if trimmedJSON == "[]" || trimmedJSON == "null" {
-		log.Printf("Response is empty, no data for this interval")
-		return nil, nil
+	if payloadCount > 1 {
+		payload = strings.Join(payloads, ", ")
+	} else if payloadCount == 1 {
+		payload = strings.Join(payloads, "")
 	} else {
-		payload := []byte(fmt.Sprintf("{ \"batch\": %s }", body))
-		batchReqs := gjson.GetBytes(payload, "batch")
-		batchReqs.ForEach(func(index, req gjson.Result) bool {
-			payload, _ = sjson.SetBytes(payload, fmt.Sprintf(`batch.%v.kassetteType`, index), api)
-			return true // keep iterating
-		})
-		return payload, nil
+		return nil, nil //no new object returned
 	}
+
+	kassettePayload := []byte(fmt.Sprintf("{ \"batch\": [ %s ] }", payload))
+	batchReqs := gjson.GetBytes(kassettePayload, "batch")
+	batchReqs.ForEach(func(index, req gjson.Result) bool {
+		kassettePayload, _ = sjson.SetBytes(kassettePayload, fmt.Sprintf(`batch.%v.kassetteType`, index), api)
+		return true // keep iterating
+	})
+	return kassettePayload, nil
 }
 
 func ExtractCamundaRest(config string, t time.Time) ([][]byte, error) {
