@@ -1,18 +1,19 @@
 package misc
 
 import (
-	"os"
-	"io"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/bugsnag/bugsnag-go"
-	"github.com/google/uuid"
+	"io"
+	"mime/multipart"
+	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
-	"mime/multipart"
+
+	"github.com/bugsnag/bugsnag-go"
+	"github.com/google/uuid"
 )
 
 const (
@@ -22,8 +23,8 @@ const (
 )
 
 type WriteKeyPayloadT struct {
-	CustomerName			string				`json:"customer_name"`
-	SecretKey				string				`json:"secret_key"`
+	CustomerName string `json:"customer_name"`
+	SecretKey    string `json:"secret_key"`
 }
 
 func (wk WriteKeyPayloadT) Combine() string {
@@ -190,12 +191,17 @@ func AssertError(err error) {
 }
 
 func GetKassetteEventUserID(eventList []interface{}) (string, bool) {
-	userID, ok := GetKassetteEventVal("anonymousId", eventList[0])
-	if !ok {
+	if len(eventList) > 0 {
+		userID, ok := GetKassetteEventVal("anonymousId", eventList[0])
+		if !ok {
+			return "", false
+		}
+		userIDStr, ok := userID.(string)
+		return userIDStr, true
+	} else {
 		return "", false
 	}
-	userIDStr, ok := userID.(string)
-	return userIDStr, true
+
 }
 
 // GetKassetteEventMap returns the event structure from the client payload
@@ -259,7 +265,7 @@ func Assert(cond bool) {
 
 // Upload a file
 func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) {
-		
+
 	err := os.MkdirAll(DestDirPath, os.ModePerm)
 	if err != nil {
 		return "", err
@@ -285,11 +291,11 @@ func UploadFile(DestDirPath string, file *multipart.FileHeader) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	
+
 	return DestPath, nil
 }
 
-//Generate a jwt token
+// Generate a jwt token
 func GenerateWriteKey(payload WriteKeyPayloadT) string {
 	hash := md5.Sum([]byte(payload.Combine()))
 	return hex.EncodeToString(hash[:])
