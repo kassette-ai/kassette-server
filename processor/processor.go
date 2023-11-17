@@ -3,26 +3,27 @@ package processor
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"sort"
+	"sync"
+	"time"
+
 	"github.com/araddon/dateparse"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"kassette.ai/kassette-server/backendconfig"
 	"kassette.ai/kassette-server/gateway"
-	jobsdb "kassette.ai/kassette-server/jobs"
-	"kassette.ai/kassette-server/misc"
-	"kassette.ai/kassette-server/utils"
-	"kassette.ai/kassette-server/utils/logger"
 	"kassette.ai/kassette-server/integrations"
+	"kassette.ai/kassette-server/integrations/anaplan"
 	"kassette.ai/kassette-server/integrations/postgres"
 	"kassette.ai/kassette-server/integrations/powerbi"
-	"kassette.ai/kassette-server/integrations/anaplan"
+	jobsdb "kassette.ai/kassette-server/jobs"
+	"kassette.ai/kassette-server/misc"
 	"kassette.ai/kassette-server/sources"
 	"kassette.ai/kassette-server/sources/camunda"
-	"kassette.ai/kassette-server/sources/postgres"
-	"log"
-	"sort"
-	"sync"
-	"time"
+	srcpostgres "kassette.ai/kassette-server/sources/postgres"
+	"kassette.ai/kassette-server/utils"
+	"kassette.ai/kassette-server/utils/logger"
 )
 
 var (
@@ -31,10 +32,10 @@ var (
 	sessionThresholdInS    time.Duration
 	sessionThresholdEvents int
 
-	configSubscriberLock   sync.RWMutex
-	configInitialized	   bool
-	connectionMap 		   map[int]backendconfig.ConnectionDetailT
-	rawDataDestinations    []string
+	configSubscriberLock sync.RWMutex
+	configInitialized    bool
+	connectionMap        map[int]backendconfig.ConnectionDetailT
+	rawDataDestinations  []string
 
 	transformBatchSize int
 )
@@ -151,7 +152,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 	//to speed-up execution.
 
 	//Event count for performance stat monitoring
-	
+
 	totalEvents := 0
 
 	for idx, batchEvent := range jobList {
@@ -269,7 +270,11 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
 			srcConverter = &camunda.TransformerHandleT{}
 			srcSkipWithNoSchema = false
-                case "Postgres":
+		case "Camunda REST":
+			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
+			srcConverter = &camunda.TransformerHandleT{}
+			srcSkipWithNoSchema = false
+		case "Postgres":
 			typeMapKassetteToSrc = sources.TypeMapKassetteToSrc
 			srcConverter = &srcpostgres.TransformerHandleT{}
 			srcSkipWithNoSchema = false
@@ -279,7 +284,7 @@ func (proc *HandleT) processJobsForDest(jobList []*jobsdb.JobT, parsedEventList 
 		response := proc.transformer.Transform(destEventList, transformRule, destConfigData, destConverter, typeMapKassetteToDest, destSkipWithNoSchema, srcConfigData, srcConverter, typeMapKassetteToSrc, srcSkipWithNoSchema, transformBatchSize)
 		destTransformEventList := response.Events
 		logger.Info(fmt.Sprintf("Transform output size: %d", len(response.Events)))
-		
+
 		if !response.Success {
 			logger.Error(fmt.Sprintf("Error in transformation for connection %v", connectionID))
 			continue

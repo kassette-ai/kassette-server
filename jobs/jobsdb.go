@@ -48,13 +48,13 @@ type JobStatusT struct {
 }
 
 type JobHealthT struct {
-	SourceName			string				`json:"source_name"`
-	DestinationName		string				`json:"destination_name"`
-	AttemptNum			int					`json:"attempt_num"`
-	DestinationConfig	json.RawMessage		`json:"destination_config"`
-	ErrorResponse		json.RawMessage		`json:"error_response"`
-	Payload				json.RawMessage		`json:"payload"`
-	ExecTime			time.Time			`json:"exec_time"`
+	SourceName        string          `json:"source_name"`
+	DestinationName   string          `json:"destination_name"`
+	AttemptNum        int             `json:"attempt_num"`
+	DestinationConfig json.RawMessage `json:"destination_config"`
+	ErrorResponse     json.RawMessage `json:"error_response"`
+	Payload           json.RawMessage `json:"payload"`
+	ExecTime          time.Time       `json:"exec_time"`
 }
 
 // constants for JobStatusT JobState
@@ -107,8 +107,8 @@ type HandleT struct {
 	maxOpenConnections int
 	analyzeThreshold   int
 	MaxDSSize          *int
-	maxDSJobs		   int
-	maxRetryNumber	   int
+	maxDSJobs          int
+	maxRetryNumber     int
 	backgroundCancel   context.CancelFunc
 	dsMigrationLock    sync.RWMutex
 
@@ -219,7 +219,7 @@ func (jd *HandleT) clearExecutingJobStatus() {
 		logger.Error("No DsList to clear the executing jobs.")
 		return
 	}
-	lastDS := dsList[len(dsList) - 1]
+	lastDS := dsList[len(dsList)-1]
 	sqlStatement := fmt.Sprintf("SELECT id, job_state from %s where id in (SELECT MAX(id) from %s GROUP BY job_id)", lastDS.JobStatusTable, lastDS.JobStatusTable)
 	rows, err := jd.dbHandle.Query(sqlStatement)
 	if err != nil {
@@ -332,7 +332,7 @@ func (jd *HandleT) getAllTableNames() []string {
 
 	defer stmt.Close()
 
-	rows, _ := stmt.Query()	
+	rows, _ := stmt.Query()
 	defer rows.Close()
 
 	tableNames := []string{}
@@ -849,7 +849,7 @@ UpdateJobStatus updates the status of a batch of jobs
 customValFilters[] is passed so we can efficiently mark empty cache
 Later we can move this to query
 */
-func (jd* HandleT) GetJobHealth() []JobHealthT {
+func (jd *HandleT) GetJobHealth() []JobHealthT {
 	jd.dsMigrationLock.RLock()
 	defer jd.dsMigrationLock.RUnlock()
 
@@ -857,7 +857,7 @@ func (jd* HandleT) GetJobHealth() []JobHealthT {
 	if len(dsList) == 0 {
 		return []JobHealthT{}
 	}
-	ds := dsList[len(dsList) - 1]
+	ds := dsList[len(dsList)-1]
 
 	var stateQuery string
 	stateFilters := []string{FailedState}
@@ -879,7 +879,7 @@ func (jd* HandleT) GetJobHealth() []JobHealthT {
 							error_code, error_response FROM %[2]s %[3]s)
 							AS job_latest_state
 							WHERE %[1]s.job_id=job_latest_state.job_id ORDER BY job_latest_state.exec_time desc`,
-							ds.JobTable, ds.JobStatusTable, stateQuery)
+		ds.JobTable, ds.JobStatusTable, stateQuery)
 	logger.Info(sqlStatement)
 	rows, err := jd.dbHandle.Query(sqlStatement)
 	defer rows.Close()
@@ -898,13 +898,13 @@ func (jd* HandleT) GetJobHealth() []JobHealthT {
 			&failedJob.LastJobStatus.JobState, &failedJob.LastJobStatus.AttemptNum,
 			&failedJob.LastJobStatus.ExecTime, &failedJob.LastJobStatus.RetryTime,
 			&failedJob.LastJobStatus.ErrorCode, &failedJob.LastJobStatus.ErrorResponse)
-		
+
 		if err != nil {
 			continue
 		}
 
 		var sourceName string
-		var destinationName	string
+		var destinationName string
 		var destinationConfig json.RawMessage
 		err = json.Unmarshal(failedJob.Parameters, &parameterConfig)
 		if err == nil {

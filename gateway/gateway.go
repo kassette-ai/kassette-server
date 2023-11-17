@@ -17,6 +17,7 @@ import (
 
 	"github.com/bugsnag/bugsnag-go"
 	stats "kassette.ai/kassette-server/services"
+	"kassette.ai/kassette-server/sources/camunda"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ var (
 	batchTimeout                              time.Duration
 	respMessage                               string
 	enabledWriteKeysSourceMap                 map[string]int
+	enabledWriteKeysWorkerPollingMap          map[string]map[string]interface{}
 	connectionsMap                            map[string][]int
 	configSubscriberLock                      sync.RWMutex
 	maxReqSize                                int
@@ -169,14 +171,23 @@ func backendConfigSubscriber() {
 		config := <-ch
 		configSubscriberLock.Lock()
 		enabledWriteKeysSourceMap = map[string]int{}
+		enabledWriteKeysWorkerPollingMap = map[string]map[string]interface{}{}
 		connectionsMap = map[string][]int{}
 		detail := config.Data.(backendconfig.ConnectionDetailsT)
 		for _, conn := range detail.Connections {
 			source := conn.SourceDetail.Source
 			connection := conn.Connection
+			sourceAccess := conn.SourceDetail.Catalogue.Access
+			catalogueSourceId := conn.SourceDetail.Catalogue.ID // static IDs defined in service catalogue
 			if source.Enabled() {
 				enabledWriteKeysSourceMap[source.WriteKey] = source.ID
 				connectionsMap[source.WriteKey] = append(connectionsMap[source.WriteKey], connection.ID)
+			}
+			if source.Enabled() && sourceAccess == "Rest" {
+				enabledWriteKeysWorkerPollingMap[source.WriteKey] = make(map[string]interface{})
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["id"] = source.ID
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["config"] = source.Config
+				enabledWriteKeysWorkerPollingMap[source.WriteKey]["catalogueSrcId"] = catalogueSourceId
 			}
 		}
 		configSubscriberLock.Unlock()
@@ -207,7 +218,107 @@ func (gateway *HandleT) Setup(jobsDB *jobsdb.HandleT, routerJobsDB *jobsdb.Handl
 
 	go backendConfigSubscriber()
 
+	go gateway.startWorkerHandlerTickers()
+
 	gateway.startWebHandler()
+}
+
+func (gateway *HandleT) startWorkerHandlerTickers() {
+	log.Printf("Started worker handler")
+	for writeKey, value := range enabledWriteKeysWorkerPollingMap {
+		config, ok := value["config"].(string)
+		if !ok {
+			log.Printf("Unable to load config %v", config)
+			return
+		}
+		catalogueSrcId, ok := value["catalogueSrcId"].(int)
+		if ok {
+			log.Printf("Config: %v, catalogueSrcId: %v", config, catalogueSrcId)
+			go gateway.startWorkerHandlerTickerForSource(writeKey, config, catalogueSrcId)
+		} else {
+			log.Printf("Unable to locate source Id: %v", config)
+			return
+		}
+
+	}
+}
+
+func (gateway *HandleT) startWorkerHandlerTickerForSource(writeKey string, config string, catalogueSrcId int) {
+	log.Printf("Started worker handler for writekey: %s", writeKey)
+	var srcConfig map[string]interface{}
+
+	err := json.Unmarshal([]byte(config), &srcConfig)
+	if err != nil {
+		log.Printf("Error in the Source config: %v", err)
+		return
+	}
+	count, countExists := srcConfig["count"].(string)
+	interval, intervalExists := srcConfig["interval"].(string)
+	url, urlExists := srcConfig["url"].(string)
+
+	if countExists && intervalExists && urlExists {
+		log.Printf("Configuration of the Rest API: url: %s, interval: %v, count: %v", url, interval, count)
+	} else {
+		log.Printf("Error, missing required parameters: %v", srcConfig)
+		return
+	}
+
+	intervalInt, err := strconv.Atoi(interval)
+	if err != nil {
+		log.Printf("Error: failed to convert interval into number")
+		return
+	}
+
+	duration := time.Duration(intervalInt*60) * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case t := <-ticker.C:
+			log.Println("Ticker extract funtion triggered at:", t)
+			switch catalogueSrcId {
+			case 13: // 13 is Camunda Rest in service catalogue
+				log.Printf("Start Camunda Rest extraction")
+				combinedPayloads, err := camunda.ExtractCamundaRest(config, t)
+				if err != nil {
+					log.Printf("Failed to exctract payload: %v", err)
+				} else {
+					for _, payload := range combinedPayloads {
+						gateway.ProcessWorkerRequest(payload, writeKey)
+					}
+				}
+			}
+		}
+	}
+
+}
+
+func (gateway *HandleT) ProcessWorkerRequest(payload []byte, writeKey string) {
+	// populating static info for internal worker process
+	reqType := "batch"
+	ipAddr := "127.0.0.2"
+	userIDHeader := "kassette-worker"
+
+	log.Printf("Processing work request")
+
+	done := make(chan string, 1)
+
+	req := webRequestT{
+		done:           done,
+		reqType:        reqType,
+		requestPayload: payload,
+		writeKey:       writeKey,
+		ipAddr:         ipAddr,
+		userIDHeader:   userIDHeader,
+	}
+	gateway.webRequestQ <- &req
+
+	// TODO: Should wait here until response is processed
+	errorMessage := <-done
+	if errorMessage != "" {
+		logger.Error(fmt.Sprint("Error processing request: ", errorMessage))
+		return
+	}
 }
 
 func (gateway *HandleT) startWebHandler() {

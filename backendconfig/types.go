@@ -62,20 +62,20 @@ type TransformationT struct {
 
 /*---- Type definitions for the new structure ----*/
 
-var SourceStatus, DestinationStatus, DestAccessType	map[string]string
+var SourceStatus, DestinationStatus, DestAccessType map[string]string
 
 func init() {
 	SourceStatus = map[string]string{
-		"ENABLED": "enabled",
+		"ENABLED":  "enabled",
 		"DISABLED": "disabled",
 	}
 	DestinationStatus = map[string]string{
-		"ENABLED": "enabled",
+		"ENABLED":  "enabled",
 		"DISABLED": "disabled",
 	}
-	DestAccessType = map[string]string {
+	DestAccessType = map[string]string{
 		"DBPOLLING": "DBPolling",
-		"REST": "Rest",
+		"REST":      "Rest",
 	}
 }
 
@@ -101,69 +101,69 @@ type HandleT struct {
 }
 
 type ServiceCatalogueT struct {
-	ID 			int				`json:"id"`
-	Name		string			`json:"name"`
-	Type		string			`json:"type"`
-	Access		string			`json:"access"`
-	Category	string			`json:"category"`
-	Url			string			`json:"url"`
-	Notes		string			`json:"notes"`
-	MetaData	string			`json:"metadata"`
-	IconUrl 	string			`json:"iconurl"`
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Access   string `json:"access"`
+	Category string `json:"category"`
+	Url      string `json:"url"`
+	Notes    string `json:"notes"`
+	MetaData string `json:"metadata"`
+	IconUrl  string `json:"iconurl"`
 }
 
 type SourceInstanceT struct {
-	ID				int				`json:"id"`
-	Name			string			`json:"name"`
-	ServiceID		int				`json:"service_id"`
-	WriteKey		string			`json:"write_key"`
-	CustomerID 		int				`json:"customer_id"`
-	CustomerName	string			`json:"customer_name"`
-	SecretKey		string			`json:"secret_key"`
-	Config			string			`json:"config"`
-	Status			string			`json:"status"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	ServiceID    int    `json:"service_id"`
+	WriteKey     string `json:"write_key"`
+	CustomerID   int    `json:"customer_id"`
+	CustomerName string `json:"customer_name"`
+	SecretKey    string `json:"secret_key"`
+	Config       string `json:"config"`
+	Status       string `json:"status"`
 }
 
 type DestinationInstanceT struct {
-	ID			int				`json:"id"`
-	Name		string			`json:"name"`
-	ServiceID	int				`json:"service_id"`
-	CustomerID 	int				`json:"customer_id"`
-	Config		string			`json:"config"`
-	Status		string			`json:"status"`
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	ServiceID  int    `json:"service_id"`
+	CustomerID int    `json:"customer_id"`
+	Config     string `json:"config"`
+	Status     string `json:"status"`
 }
 
 type SourceDetailT struct {
-	Source			SourceInstanceT		`json:"source"`
-	Catalogue		ServiceCatalogueT	`json:"catalogue"`
+	Source    SourceInstanceT   `json:"source"`
+	Catalogue ServiceCatalogueT `json:"catalogue"`
 }
 
 type DestinationDetailT struct {
-	Destination		DestinationInstanceT	`json:"destination"`
-	Catalogue		ServiceCatalogueT		`json:"catalogue"`
+	Destination DestinationInstanceT `json:"destination"`
+	Catalogue   ServiceCatalogueT    `json:"catalogue"`
 }
 
 type SourceConnectionsT struct {
-	SourceDetail			SourceDetailT				`json:"source_detail"`
-	DestinationDetails		[]DestinationDetailT		`json:"destination_details"`
+	SourceDetail       SourceDetailT        `json:"source_detail"`
+	DestinationDetails []DestinationDetailT `json:"destination_details"`
 }
 
 type DestinationConnectionsT struct {
-	DestinationDetail		DestinationDetailT			`json:"destination_detail"`
-	SourceDetails			[]SourceDetailT				`json:"source_details`
+	DestinationDetail DestinationDetailT `json:"destination_detail"`
+	SourceDetails     []SourceDetailT    `json:"source_details`
 }
 
 type ConnectionInstanceT struct {
-	ID				int				`json:"id"`
-	SourceID		int				`json:"source_id"`
-	DestinationID	int				`json:"destination_id"`
-	Transforms		string			`json:"transforms"`
+	ID            int    `json:"id"`
+	SourceID      int    `json:"source_id"`
+	DestinationID int    `json:"destination_id"`
+	Transforms    string `json:"transforms"`
 }
 
 type ConnectionDetailT struct {
-	Connection			ConnectionInstanceT	`json:"connection"`
-	SourceDetail		SourceDetailT		`json:"source_detail"`
-	DestinationDetail	DestinationDetailT	`json:"destination_detail"`
+	Connection        ConnectionInstanceT `json:"connection"`
+	SourceDetail      SourceDetailT       `json:"source_detail"`
+	DestinationDetail DestinationDetailT  `json:"destination_detail"`
 }
 
 type ConnectionDetailsT struct {
